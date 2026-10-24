@@ -63,6 +63,14 @@ It has two sides:
 - **user_source_accounts**: a user's account on an external network; for hosting,
   `credential_ref` is their Browserbase context id (saved cookies, so they log in once).
 - **applications**: for applying on a user's behalf (next phase).
+- **incoming_requests**: stay requests a host received, from any network. Internal ones are
+  mirrored from `applications` when the host opens `/requests`; external ones are imported
+  (`POST /api/v1/requests`), unique per host on `(source_id, external_ref)`.
+- **background_checks** (+ `_findings`, `_events`): a host-requested look at a guest's public
+  footprint, run by the agent in `src/lib/checks/agent.ts`. Identity and consistency only:
+  never criminal, court or credit records, nothing behind a login. Member guests can read
+  checks about themselves (`/me/checks`). Deleted at `expires_at` (30 days after the host
+  answers or the stay ends, 90 if never answered).
 - Planned: messages, notifications.
 
 ## Scraping conventions
@@ -123,6 +131,7 @@ It has two sides:
 - Neon (`agentbnb-db`), Vercel Blob (`agentbnb-photos`) and Browserbase
   (`BROWSERBASE_API_KEY`, `BROWSERBASE_PROJECT_ID`) are attached via the Vercel Marketplace /
   `vercel blob`. Admin endpoints use bearer `INGEST_TOKEN`.
-- Public API for people and their agents lives under `/api/v1` (register, me, keys), with
+- Public API for people and their agents lives under `/api/v1` (register, me, keys, requests,
+  background-checks), with
   agent-readable docs at `/docs.md`. Errors are `{ error: { code, message } }`; keep
   `/docs.md` in sync when endpoints change.

@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
 import {
+  bigserial,
   boolean,
   date,
   doublePrecision,
@@ -402,4 +403,177 @@ export const applications = pgTable(
     index("applications_user_idx").on(t.userId),
     index("applications_listing_idx").on(t.listingId),
   ],
+);
+
+// ---------------------------------------------------------------------------
+// Hosting: incoming stay requests and background checks
+// ---------------------------------------------------------------------------
+
+export const requestStatus = pgEnum("request_status", [
+  "new",
+  "replied",
+  "accepted",
+  "declined",
+  "expired",
+  "withdrawn", // the guest pulled out
+]);
+
+/** What the platform showed about the person asking to stay, captured when the request came in. */
+export type GuestSnapshot = {
+  name: string;
+  profileUrl?: string | null;
+  photoUrl?: string | null;
+  username?: string | null;
+  location?: string | null;
+  age?: number | null;
+  memberSince?: string | null;
+  references?: number | null;
+  verified?: boolean | null;
+  languages?: string[];
+  about?: string | null;
+};
+
+/**
+ * A request to stay at one of a host's places, from any network. Internal ones mirror an
+ * `applications` row; external ones are imported from the host's inbox on that platform.
+ */
+export const incomingRequests = pgTable(
+  "incoming_requests",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    hostUserId: uuid("host_user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    listingId: uuid("listing_id").references(() => listings.id, { onDelete: "set null" }),
+    sourceId: text("source_id")
+      .notNull()
+      .references(() => sources.id),
+    /** Internal requests only. */
+    applicationId: uuid("application_id")
+      .unique()
+      .references(() => applications.id, { onDelete: "cascade" }),
+    /** Set when the guest is one of our members. */
+    guestUserId: uuid("guest_user_id").references(() => users.id, { onDelete: "set null" }),
+    /** The request's id on the platform. */
+    externalRef: text("external_ref"),
+    /** Where the host answers it on the platform. */
+    externalUrl: text("external_url"),
+    guest: jsonb("guest").$type<GuestSnapshot>().notNull(),
+    message: text("message"),
+    startDate: date("start_date"),
+    endDate: date("end_date"),
+    guestCount: integer("guest_count"),
+    status: requestStatus("status").notNull().default("new"),
+    receivedAt: timestamp("received_at", { withTimezone: true }).defaultNow().notNull(),
+    respondedAt: timestamp("responded_at", { withTimezone: true }),
+    ...timestamps,
+  },
+  (t) => [
+    index("incoming_requests_host_idx").on(t.hostUserId, t.receivedAt),
+    uniqueIndex("incoming_requests_host_source_ref_idx").on(t.hostUserId, t.sourceId, t.externalRef),
+  ],
+);
+
+export const backgroundCheckStatus = pgEnum("background_check_status", ["running", "done", "failed"]);
+
+export const backgroundCheckVerdict = pgEnum("background_check_verdict", [
+  "consistent", // everything we found lines up
+  "some_gaps", // nothing wrong, but not much to go on
+  "red_flags",
+]);
+
+export const findingCategory = pgEnum("finding_category", [
+  "identity", // does the name, photo, age and location line up across sources
+  "reputation", // references, reviews, past stays
+  "presence", // where else they show up online, and what it says
+  "red_flag",
+]);
+
+export const findingConfidence = pgEnum("finding_confidence", ["low", "medium", "high"]);
+
+/** The profile of the guest the agent builds up while it investigates. */
+export type CheckProfile = {
+  name?: string;
+  /** One line on who they seem to be ("Product designer from Berlin, travels by bike"). */
+  headline?: string;
+  location?: string;
+  occupation?: string;
+  languages?: string[];
+  /** How sure we are that the profiles below are all the same person. */
+  identity?: "strong" | "partial" | "weak" | "unknown";
+  profiles?: { platform: string; url: string; note?: string }[];
+};
+
+/**
+ * A host-requested look at a guest's public footprint. Identity and consistency only: no criminal
+ * records, no credit. Internal guests can read checks about themselves. Deleted at `expiresAt`.
+ */
+export const backgroundChecks = pgTable(
+  "background_checks",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    requestId: uuid("request_id")
+      .notNull()
+      .references(() => incomingRequests.id, { onDelete: "cascade" }),
+    requestedBy: uuid("requested_by")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    /** The guest, when they're one of our members; they can see this check. */
+    guestUserId: uuid("guest_user_id").references(() => users.id, { onDelete: "set null" }),
+    status: backgroundCheckStatus("status").notNull().default("running"),
+    verdict: backgroundCheckVerdict("verdict"),
+    summary: text("summary"),
+    profile: jsonb("profile").$type<CheckProfile>().notNull().default({}),
+    /** Things worth asking the guest before saying yes. */
+    questions: text("questions").array().notNull().default(sql`'{}'::text[]`),
+    /** What the agent looked for and couldn't confirm. */
+    unverified: text("unverified").array().notNull().default(sql`'{}'::text[]`),
+    model: text("model"),
+    steps: integer("steps").notNull().default(0),
+    error: text("error"),
+    startedAt: timestamp("started_at", { withTimezone: true }).defaultNow().notNull(),
+    finishedAt: timestamp("finished_at", { withTimezone: true }),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    ...timestamps,
+  },
+  (t) => [
+    index("background_checks_request_idx").on(t.requestId, t.startedAt),
+    index("background_checks_guest_idx").on(t.guestUserId),
+    index("background_checks_expires_idx").on(t.expiresAt),
+  ],
+);
+
+/** One sourced fact in a check's report. */
+export const backgroundCheckFindings = pgTable(
+  "background_check_findings",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    checkId: uuid("check_id")
+      .notNull()
+      .references(() => backgroundChecks.id, { onDelete: "cascade" }),
+    category: findingCategory("category").notNull(),
+    title: text("title").notNull(),
+    detail: text("detail"),
+    sourceUrl: text("source_url"),
+    sourceTitle: text("source_title"),
+    confidence: findingConfidence("confidence").notNull(),
+    createdAt: timestamps.createdAt,
+  },
+  (t) => [index("background_check_findings_check_idx").on(t.checkId, t.createdAt)],
+);
+
+/** The live feed of what the agent is doing ("Searching the web for ..."), shown while it runs. */
+export const backgroundCheckEvents = pgTable(
+  "background_check_events",
+  {
+    id: bigserial("id", { mode: "number" }).primaryKey(), // ordered, so pollers can ask for "after <id>"
+    checkId: uuid("check_id")
+      .notNull()
+      .references(() => backgroundChecks.id, { onDelete: "cascade" }),
+    kind: text("kind").notNull(), // search | read | profile | finding | note | error
+    message: text("message").notNull(),
+    url: text("url"),
+    createdAt: timestamps.createdAt,
+  },
+  (t) => [index("background_check_events_check_idx").on(t.checkId, t.createdAt)],
 );
