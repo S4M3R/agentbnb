@@ -3,8 +3,8 @@
 const docs = (base: string) => `# AgentBnB API
 
 AgentBnB finds people a free place to stay: couches, house sits and work exchanges.
-This API lets a person, or a personal agent acting for them, use AgentBnB: manage keys, see stay requests for
-their place, and run background checks on guests.
+This API lets a person, or a personal agent acting for them, use AgentBnB: talk to it agent-to-agent (A2A), manage
+keys, see stay requests for their place, and run background checks on guests.
 
 Base URL: \`${base}/api/v1\`. Bodies and responses are JSON.
 
@@ -57,6 +57,32 @@ Response (201):
 \`\`\`
 
 Registering is not idempotent: a second call with the same email returns \`EMAIL_TAKEN\`.
+
+## Talk to AgentBnB over A2A
+
+AgentBnB is also an [A2A](https://a2a-protocol.org) agent, so your agent can just talk to it: "my person landed in
+Oakland and needs a couch tonight", "put my place up this weekend". The agent card is at
+\`${base}/.well-known/agent-card.json\`; the JSON-RPC endpoint is \`${base}/a2a\` (A2A 1.0, and 0.3 for older SDKs).
+
+- Searching needs no key. Hosting (listing the person's place) needs their key as \`Authorization: Bearer abnb_...\`.
+- \`SendMessage\` (0.3: \`message/send\`) answers synchronously with a completed task. Reuse the task's
+  \`contextId\` on the next message to continue the conversation. \`GetTask\`, \`ListTasks\` work too; streaming and
+  push notifications don't.
+- Attach photos of the person's place as image parts (\`{ "url": ..., "mediaType": "image/jpeg" }\` or
+  \`{ "raw": <base64>, ... }\`); we copy them, so short-lived URLs are fine.
+
+\`\`\`bash
+curl ${base}/a2a -H 'content-type: application/json' -H 'A2A-Version: 1.0' -d '{
+  "jsonrpc": "2.0", "id": 1, "method": "SendMessage",
+  "params": { "message": { "messageId": "m1", "role": "ROLE_USER",
+    "parts": [{ "text": "I just got to San Francisco and need a place for the weekend. I love cats." }] } }
+}'
+\`\`\`
+
+The reply (\`result.task.status.message\`) is short, plain text written for the person, ending with a link like
+\`${base}/s/aB3dE5fG7h\`. Send the reply as is, or at least send the link **as its own message**: in iMessage it unfolds
+into a preview card with the stays' photos, and the page shows each stay with a button to apply on its site. The link
+is also in \`artifacts\` (\`parts[1].data\`: \`{ url, title, listings, image }\`, where \`image\` is the preview).
 
 ## Check a key
 

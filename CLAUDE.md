@@ -80,6 +80,10 @@ It has two sides:
   never criminal, court or credit records, nothing behind a login. Member guests can read
   checks about themselves (`/me/checks`). Deleted at `expires_at` (30 days after the host
   answers or the stay ends, 90 if never answered).
+- **share_links**: short links (`/s/<id>`) to listings an agent picked, for another agent to send in
+  iMessage. Public, so they show public fields only; a host's draft only on a link made for that host.
+- **a2a_tasks**: one A2A turn (caller's message + our reply, stored in 1.0 shape); turns sharing a
+  `context_id` are one conversation, replayed to the model from `model_messages`.
 
 ## Scraping conventions
 - Scrapers are browser scripts (`scripts/scrapers/<source>.browser.js`) run in a
@@ -141,6 +145,20 @@ It has two sides:
 - Applying: `getMyApplications`, `updateMyProfile`, `applyToListings`, `sendApplications`,
   `messageHost`, `withdrawApplications`, `scheduleStay`, `respondToRequest` (hosts).
 
+## A2A (agent-to-agent): Instinct and other personal agents (`src/lib/a2a/`)
+- Agent card at `/.well-known/agent-card.json` (also `/.well-known/agent.json`), JSON-RPC at `/a2a`. Speaks
+  A2A 1.0 and 0.3 (`protocol.ts` converts; the version comes from the `A2A-Version` header, else the method
+  name). Answers synchronously with a completed task; no streaming or push.
+- Same API keys as `/api/v1`, optional: anonymous callers can search, hosting needs a key. A bad key is a
+  401, never a silent downgrade.
+- `agent.ts` runs the same stay tools as the web chat plus `shareLink`, and for keyed callers
+  `saveListingDraft` / `publishListing` / `getMyListings` (the client-side location/photo tools don't apply;
+  location comes as text, photos as image parts that `photos.ts` copies into Blob). Replies are plain text for
+  iMessage, ending with the share link; if the model forgets, the top search results get a link anyway.
+- Share pages `/s/[id]` are phone-first; `opengraph-image.tsx` draws the preview (photo mosaic + headline,
+  Inter from `assets/fonts/`). Satori only draws JPEG/PNG/GIF, so photos are fetched and filtered first.
+  iMessage's link fetcher identifies as `facebookexternalhit`, so Next puts metadata in `<head>` for it.
+
 ## Design
 - UI follows `DESIGN.md` (Airbnb-inspired tokens and components, from
   VoltAgent/awesome-design-md, MIT). Read it before building or restyling UI.
@@ -159,6 +177,6 @@ It has two sides:
   (`BROWSERBASE_API_KEY`, `BROWSERBASE_PROJECT_ID`) are attached via the Vercel Marketplace /
   `vercel blob`. Admin endpoints use bearer `INGEST_TOKEN`.
 - Public API for people and their agents lives under `/api/v1` (register, me, keys, requests,
-  background-checks), with
+  background-checks) and A2A at `/a2a`, with
   agent-readable docs at `/docs.md`. Errors are `{ error: { code, message } }`; keep
   `/docs.md` in sync when endpoints change.
