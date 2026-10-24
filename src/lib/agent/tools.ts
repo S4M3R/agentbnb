@@ -3,6 +3,8 @@ import { and, count, desc, eq, inArray, isNotNull, sql, type SQL } from "drizzle
 import { z } from "zod";
 import { db, schema } from "@/db";
 import { MARKETS } from "@/lib/markets";
+import type { WebSession } from "@/lib/session";
+import { hostingTools } from "./hosting-tools";
 
 const { listings, listingAvailability: avail, listingPhotos, sources, externalHosts } = schema;
 
@@ -349,6 +351,8 @@ const getCoverage = tool({
   },
 });
 
-export const agentTools = { searchStays, getListing, getCoverage };
+export function createAgentTools(session: WebSession) {
+  return { searchStays, getListing, getCoverage, ...hostingTools(session) };
+}
 
-export type AgentUIMessage = UIMessage<never, UIDataTypes, InferUITools<typeof agentTools>>;
+export type AgentUIMessage = UIMessage<never, UIDataTypes, InferUITools<ReturnType<typeof createAgentTools>>>;

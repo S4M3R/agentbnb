@@ -57,7 +57,8 @@ export const listingType = pgEnum("listing_type", [
 
 export const priceModel = pgEnum("price_model", ["free", "exchange", "paid"]);
 
-export const listingStatus = pgEnum("listing_status", ["active", "paused", "gone"]);
+/** `draft`: an internal listing the host hasn't published yet; hidden from search. */
+export const listingStatus = pgEnum("listing_status", ["draft", "active", "paused", "gone"]);
 
 /** How precise listings.lat/lng is. Scraped sources usually only expose a city centroid. */
 export const locationPrecision = pgEnum("location_precision", [
@@ -87,6 +88,16 @@ export const applicationChannel = pgEnum("application_channel", [
 /** Which personal agent holds an API key. Self-declared at registration; we can't verify it. */
 export const agentKind = pgEnum("agent_kind", ["instinct", "dot", "muse", "other"]);
 
+/** Where a host's listing stands on one external network. */
+export const publicationStatus = pgEnum("publication_status", [
+  "queued",
+  "running", // the browser agent is working on it
+  "needs_user", // waiting for the host to log in / finish something in the live browser
+  "live",
+  "failed",
+  "removed",
+]);
+
 export const applicationStatus = pgEnum("application_status", [
   "draft",
   "sent",
@@ -104,7 +115,7 @@ export const applicationStatus = pgEnum("application_status", [
 export const users = pgTable("users", {
   id: uuid("id").primaryKey().defaultRandom(),
   name: text("name").notNull(),
-  email: text("email").notNull().unique(),
+  email: text("email").unique(), // null for people who started in the web chat and haven't given one
   bio: text("bio"),
   avatarUrl: text("avatar_url"),
   homeCity: text("home_city"),
@@ -288,6 +299,37 @@ export const listingAvailability = pgTable(
     index("listing_availability_listing_idx").on(t.listingId),
     index("listing_availability_dates_idx").on(t.startDate, t.endDate),
   ],
+);
+
+/**
+ * A host's internal listing copied onto an external network (Trustroots, BeWelcome, ...) by the
+ * browser agent, in a Browserbase session the host can watch and take over.
+ */
+export const listingPublications = pgTable(
+  "listing_publications",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    listingId: uuid("listing_id")
+      .notNull()
+      .references(() => listings.id, { onDelete: "cascade" }),
+    sourceId: text("source_id")
+      .notNull()
+      .references(() => sources.id),
+    status: publicationStatus("status").notNull().default("queued"),
+    /** Latest thing the agent did or is asking the host to do, shown next to the live view. */
+    statusMessage: text("status_message"),
+    externalUrl: text("external_url"),
+    browserSessionId: text("browser_session_id"),
+    liveViewUrl: text("live_view_url"),
+    /** Set when the host taps "Continue" after doing something in the live browser. */
+    userActedAt: timestamp("user_acted_at", { withTimezone: true }),
+    error: text("error"),
+    attempts: integer("attempts").notNull().default(0),
+    publishedAt: timestamp("published_at", { withTimezone: true }),
+    lastSyncedAt: timestamp("last_synced_at", { withTimezone: true }),
+    ...timestamps,
+  },
+  (t) => [uniqueIndex("listing_publications_listing_source_idx").on(t.listingId, t.sourceId)],
 );
 
 // ---------------------------------------------------------------------------
