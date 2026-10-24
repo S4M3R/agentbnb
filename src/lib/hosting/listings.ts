@@ -1,7 +1,7 @@
 import { and, asc, desc, eq, inArray } from "drizzle-orm";
 import { z } from "zod";
 import { db, schema } from "@/db";
-import { geocodeLoose, publicCoordinates } from "@/lib/geocode";
+import { geocodeLoose, publicCoordinates, reverseGeocode } from "@/lib/geocode";
 import { marketFor } from "@/lib/markets";
 import { ARRANGEMENTS, getNetwork, type Arrangement } from "./networks";
 
@@ -24,7 +24,14 @@ export const ListingDraft = z.object({
     .string()
     .min(3)
     .optional()
-    .describe("Street address, or at least neighborhood + city. Required when creating. Kept private."),
+    .describe(
+      "Street address, or at least neighborhood + city, or the label from askForLocation. Kept private. " +
+        "Creating needs this or `point`.",
+    ),
+  point: z
+    .object({ lat: z.number().min(-90).max(90), lng: z.number().min(-180).max(180) })
+    .optional()
+    .describe("Exact spot from askForLocation (GPS or map pin). Preferred over geocoding the address."),
   arrangement: z.enum(ARRANGEMENTS).describe(
     "hosting: free stay while the host is home. house_sit: the host is away and someone minds the home/pets. " +
       "exchange: a bed in exchange for a few hours of help.",
@@ -72,15 +79,28 @@ async function ownedListing(userId: string, listingId: string) {
 /** Create or update the host's draft. Returns the listing as the host sees it. */
 export async function saveListingDraft(userId: string, input: ListingDraft) {
   const existing = input.listingId ? await ownedListing(userId, input.listingId) : null;
-  if (!existing && !input.address) throw new HostingError("I need the address (or neighborhood and city) first.");
+  if (!existing && !input.address && !input.point) {
+    throw new HostingError("I need to know where the place is first (ask with askForLocation).");
+  }
 
   let location = {};
-  if (input.address && input.address !== existing?.address) {
-    const place = await geocodeLoose(input.address);
-    if (!place) throw new HostingError(`I couldn't find "${input.address}" on the map. Ask for the street or neighborhood and city.`);
+  const moved = input.point
+    ? input.point.lat !== existing?.lat || input.point.lng !== existing?.lng
+    : input.address !== undefined && input.address !== existing?.address;
+  if (moved) {
+    const place = input.point
+      ? await reverseGeocode(input.point.lat, input.point.lng)
+      : await geocodeLoose(input.address!);
+    if (!place) {
+      throw new HostingError(
+        input.point
+          ? "I couldn't name that spot on the map. Ask them to pick again."
+          : `I couldn't find "${input.address}" on the map. Ask them to share their location or pick it on the map.`,
+      );
+    }
     const coords = publicCoordinates(place);
     location = {
-      address: input.address,
+      address: input.address ?? place.label,
       neighborhood: place.neighborhood,
       city: place.city,
       subregion: place.subregion,

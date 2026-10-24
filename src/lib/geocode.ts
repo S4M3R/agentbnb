@@ -41,17 +41,20 @@ export async function geocodeLoose(query: string): Promise<(Place & { exact: boo
   return null;
 }
 
-export async function geocode(query: string): Promise<Place | null> {
-  const url = new URL("https://nominatim.openstreetmap.org/search");
-  url.search = new URLSearchParams({ q: query, format: "jsonv2", addressdetails: "1", limit: "1" }).toString();
+const NOMINATIM = "https://nominatim.openstreetmap.org";
+
+async function nominatim<T>(path: string, params: Record<string, string>): Promise<T> {
+  const url = new URL(path, NOMINATIM);
+  url.search = new URLSearchParams({ format: "jsonv2", addressdetails: "1", ...params }).toString();
   const res = await fetch(url, {
     headers: { "User-Agent": "AgentBnB/0.1 (https://agentbnb.agustin.build)", "Accept-Language": "en" },
     signal: AbortSignal.timeout(8000),
   });
   if (!res.ok) throw new Error(`Geocoding failed: ${res.status}`);
-  const [hit] = (await res.json()) as NominatimResult[];
-  if (!hit) return null;
+  return res.json() as Promise<T>;
+}
 
+function toPlace(hit: NominatimResult): Place {
   const a = hit.address;
   return {
     lat: Number(hit.lat),
@@ -63,6 +66,33 @@ export async function geocode(query: string): Promise<Place | null> {
     countryCode: a.country_code?.toUpperCase() ?? null,
     label: hit.display_name,
   };
+}
+
+export async function geocode(query: string): Promise<Place | null> {
+  const [hit] = await nominatim<NominatimResult[]>("/search", { q: query, limit: "1" });
+  return hit ? toPlace(hit) : null;
+}
+
+/** Up to `limit` matches for a search box. */
+export async function searchPlaces(query: string, limit = 5): Promise<Place[]> {
+  const hits = await nominatim<NominatimResult[]>("/search", { q: query, limit: String(limit) });
+  return hits.map(toPlace);
+}
+
+/** The neighborhood/city around a point, e.g. from the browser's location or a map pin. */
+export async function reverseGeocode(lat: number, lng: number): Promise<Place | null> {
+  const hit = await nominatim<NominatimResult | { error: string }>("/reverse", {
+    lat: String(lat),
+    lon: String(lng),
+    zoom: "18",
+  });
+  if ("error" in hit) return null;
+  return { ...toPlace(hit), lat, lng };
+}
+
+/** "Mission, San Francisco" — what we show people instead of a full address. */
+export function shortLabel(place: Pick<Place, "neighborhood" | "city" | "region" | "label">) {
+  return [place.neighborhood, place.city ?? place.region].filter(Boolean).join(", ") || place.label;
 }
 
 /**
