@@ -43,6 +43,13 @@
       "when": 1792873447449,
       "tag": "0005_a2a_share_links",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1792873768276,
+      "tag": "0006_rentals",
+      "breakpoints": true
     }
   ]
 }
