@@ -71,9 +71,12 @@ async function agentbnbScrapeTHS({
         seenIds.add(summary.id);
         progress.seen = seenIds.size;
 
+        // Some listings' detail endpoint consistently returns an empty body; fall
+        // back to the search summary (title, location, photos, open assignments).
         const detail = await getJson(`/api/v3/search/listings/${summary.id}/`).catch((err) => {
-          progress.errors.push({ id: summary.id, error: String(err) });
-          return null;
+          progress.fallbacks = (progress.fallbacks ?? 0) + 1;
+          progress.lastFallbackError = String(err);
+          return summary;
         });
         if (detail) {
           // Search results carry the upcoming open assignments; detail carries history.

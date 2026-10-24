@@ -68,9 +68,17 @@ listing. Ingest upserts listings, replaces their photos/availability, records a
 
 | Source | Kind | Scope | Location |
 |---|---|---|---|
-| TrustedHousesitters | house sit | open upcoming sits in the Bay Area bounds | city centroid |
-| Workaway | work exchange | California host list | host coordinates |
-| Worldpackers | work exchange | California positions | host coordinates |
+| TrustedHousesitters | house sit | open sits in the Bay Area bounds | city centroid |
+| House Sitters America, MindMyHouse, Nomador, HouseCarers | house sit | US / California | map pin, rounded ~1 km |
+| Workaway, Worldpackers | work exchange | California | host coordinates |
+| HelpX, HelpStay, Working Traveller, Volunteers Base | work exchange | California | city centroid or map pin |
+| WWOOF-USA | farm stay | California | rounded ~1 km |
+| HomeExchange, Kindred, HomeLink, Intervac | home swap | Bay Area search | rounded ~1 km |
+| Pasporta Servo | couch (Esperanto) | public map layer | rounded ~1 km |
+
+Scrapers named `*.node.ts` run from Node (`npx tsx scripts/scrapers/<id>.node.ts`) for
+sources whose public pages don't need a browser. HouseCarers' robots.txt blocks
+aggregators: it was scraped once for the demo; don't re-run it.
 
 Login-gated couch-surfing sites (Couchsurfing, BeWelcome, Trustroots,
 Warmshowers) are in `sources` but are not scraped; they need a user's own
@@ -87,7 +95,7 @@ Bearer `INGEST_TOKEN`:
 ## Roadmap
 
 - [x] Data model: users, sources, listings + photos + availability, scrape runs, applications
-- [x] Scrapers: TrustedHousesitters, Workaway, Worldpackers (SF Bay Area)
+- [x] Scrapers for 17 public sources (SF Bay Area): house sits, work exchange, farm stays, home swaps
 - [ ] Messages + notifications tables
 - [ ] Agent chat (`/api/chat`) with tools: `listMyPlace`, `searchStays`, `requestStay`, `respondToRequest`, `scheduleStay`
 - [ ] More sources: Nomador, MindMyHouse, HouseCarers, HelpX; user-session access to Couchsurfing / BeWelcome / Trustroots

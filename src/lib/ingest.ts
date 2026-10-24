@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { and, eq, lt, sql } from "drizzle-orm";
+import { and, eq, isNull, lt, or, sql } from "drizzle-orm";
 import { db } from "@/db";
 import {
   externalHosts,
@@ -133,8 +133,8 @@ export async function recordBatch(
 }
 
 /**
- * Close a run. On a successful, complete run, listings in the run's market
- * that weren't seen during the run are marked `gone`.
+ * Close a run. On a successful, complete run, the source's listings in the
+ * run's market (or with no market) that weren't seen during the run are marked `gone`.
  */
 export async function finishRun(
   runId: string,
@@ -151,7 +151,9 @@ export async function finishRun(
       .where(
         and(
           eq(listings.sourceId, run.sourceId),
-          eq(listings.market, run.market),
+          // Scrapes cover the run's market plus whatever else the source's
+          // search returned (e.g. all of California), which has no market.
+          or(eq(listings.market, run.market), isNull(listings.market)),
           eq(listings.status, "active"),
           lt(listings.lastSeenAt, run.startedAt),
         ),

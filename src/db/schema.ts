@@ -36,6 +36,8 @@ export const sourceKind = pgEnum("source_kind", [
   "work_exchange",
   "farm_stay",
   "home_swap",
+  "rental", // paid rooms / sublets / coliving
+  "hostel",
 ]);
 
 /** How we get data out of a source. */
@@ -57,6 +59,9 @@ export const listingType = pgEnum("listing_type", [
 ]);
 
 export const priceModel = pgEnum("price_model", ["free", "exchange", "paid"]);
+
+/** What `price_amount_cents` is per, for paid listings. */
+export const pricePeriod = pgEnum("price_period", ["night", "week", "month", "stay"]);
 
 /** `draft`: an internal listing the host hasn't published yet; hidden from search. */
 export const listingStatus = pgEnum("listing_status", ["draft", "active", "paused", "gone"]);
@@ -241,7 +246,7 @@ export const listings = pgTable(
     lat: doublePrecision("lat"),
     lng: doublePrecision("lng"),
     locationPrecision: locationPrecision("location_precision"),
-    address: text("address"), // internal listings only, never scraped
+    address: text("address"), // internal listings and businesses (hostels); never private homes
 
     // Stay details
     maxGuests: integer("max_guests"),
@@ -249,6 +254,7 @@ export const listings = pgTable(
     maxNights: integer("max_nights"),
     priceModel: priceModel("price_model").notNull().default("free"),
     priceAmountCents: integer("price_amount_cents"),
+    pricePeriod: pricePeriod("price_period"),
     currency: text("currency"),
     amenities: text("amenities").array().notNull().default(sql`'{}'::text[]`),
     languages: text("languages").array().notNull().default(sql`'{}'::text[]`),
