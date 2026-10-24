@@ -21,15 +21,14 @@ searches every connected marketplace plus the internal network:
 
 - [Next.js 16](https://nextjs.org) (App Router, `src/`), Tailwind CSS v4
 - [AI SDK 7](https://ai-sdk.dev) via Vercel AI Gateway (`ai`, `@ai-sdk/react`)
-- Postgres with [Drizzle ORM](https://orm.drizzle.team): Neon in production,
-  PGlite (embedded Postgres) for local dev
+- Postgres with [Drizzle ORM](https://orm.drizzle.team) on Neon
 - Deployed on Vercel (project: `s4m3rs-projects/agentbnb`)
 
 ## Getting started
 
 ```bash
 pnpm install
-vercel env pull --yes   # pulls VERCEL_OIDC_TOKEN for AI Gateway (and DATABASE_URL once Neon is attached)
+vercel env pull --yes   # pulls VERCEL_OIDC_TOKEN (AI Gateway), DATABASE_URL, BLOB_READ_WRITE_TOKEN, INGEST_TOKEN
 pnpm dev
 ```
 
@@ -37,15 +36,14 @@ Open http://localhost:3000.
 
 ### Database
 
-Neon is provisioned through the Vercel Marketplace. Accept Neon's terms once at
-https://vercel.com/s4m3rs-projects/~/integrations/accept-terms/neon, then run:
+Neon (`agentbnb-db`) is attached through the Vercel Marketplace; `DATABASE_URL`
+is required, including for local dev.
 
 ```bash
-vercel integration add neon --no-claim --name agentbnb-db
-vercel env pull --yes
+pnpm db:generate   # generate a migration from src/db/schema.ts
+pnpm db:migrate    # apply migrations
+pnpm db:seed       # seed sample data
 ```
-
-When `DATABASE_URL` isn't set, the app uses a local PGlite database instead.
 
 ## Roadmap
 
