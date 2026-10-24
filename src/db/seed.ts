@@ -40,6 +40,13 @@ const SOURCES: NewSource[] = [
   { id: "nomador", name: "Nomador", kind: "house_sit", access: "public", baseUrl: "https://www.nomador.com" },
   { id: "mindmyhouse", name: "MindMyHouse", kind: "house_sit", access: "public", baseUrl: "https://www.mindmyhouse.com" },
   { id: "housecarers", name: "HouseCarers", kind: "house_sit", access: "public", baseUrl: "https://www.housecarers.com" },
+  {
+    id: "housesittersamerica",
+    name: "House Sitters America",
+    kind: "house_sit",
+    access: "public",
+    baseUrl: "https://www.housesittersamerica.com",
+  },
   { id: "wwoof-usa", name: "WWOOF-USA", kind: "farm_stay", access: "login", baseUrl: "https://wwoofusa.org" },
   // Login-gated couch surfing: only through a user's own session or a partnership.
   {
@@ -52,6 +59,7 @@ const SOURCES: NewSource[] = [
   },
   { id: "bewelcome", name: "BeWelcome", kind: "couch", access: "login", baseUrl: "https://www.bewelcome.org" },
   { id: "trustroots", name: "Trustroots", kind: "couch", access: "login", baseUrl: "https://www.trustroots.org" },
+  { id: "couchers", name: "Couchers.org", kind: "couch", access: "login", baseUrl: "https://couchers.org" },
   { id: "warmshowers", name: "Warmshowers", kind: "couch", access: "login", baseUrl: "https://www.warmshowers.org" },
 ];
 

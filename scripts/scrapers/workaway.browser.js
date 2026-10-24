@@ -2,45 +2,33 @@
 //
 // Evaluate in a tab on https://www.workaway.info, then call:
 //
-//   agentbnbScrapeWorkaway({ endpoint: "http://localhost:3000", token: "<INGEST_TOKEN>" })
+//   agentbnbScrapeWorkaway()
 //
 // Walks the regional host list, opens each host page (same-origin fetch),
-// extracts sections/photos/calendar/coordinates and posts batches to
-// /api/ingest/workaway. The server tags each listing with its market from
-// lat/lng. Progress is exposed on window.__agentbnbProgress.
+// extracts sections/photos/calendar/coordinates, and downloads one
+// `workaway-<market>-<timestamp>.json` file. Load it with
+// `pnpm ingest <file>`. Progress is exposed on window.__agentbnbProgress.
 
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 async function agentbnbScrapeWorkaway({
-  endpoint,
-  token,
   market = "sf-bay-area",
   listPath = "/en/hostlist/northamerica/us?region=california",
   region = "California",
-  batchSize = 10,
   delayMs = 600,
   maxPages = 20,
-}) {
+  limit = Infinity,
+} = {}) {
   const progress = (window.__agentbnbProgress = {
     state: "running",
     pages: 0,
     seen: 0,
     posted: 0,
-    counts: { found: 0, created: 0, updated: 0, unchanged: 0, skipped: 0 },
     errors: [],
   });
+  const startedAt = new Date().toISOString();
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
   const clean = (s) => (s ?? "").replace(/[ \t]+/g, " ").replace(/\n\s*\n+/g, "\n").trim();
-
-  const ingest = async (body) => {
-    const res = await fetch(`${endpoint}/api/ingest/workaway`, {
-      method: "POST",
-      headers: { "content-type": "application/json", authorization: `Bearer ${token}` },
-      body: JSON.stringify(body),
-    });
-    if (!res.ok) throw new Error(`ingest ${body.action} ${res.status}: ${await res.text()}`);
-    return res.json();
-  };
 
   const getDoc = async (url) => {
     const res = await fetch(url);
@@ -126,15 +114,15 @@ async function agentbnbScrapeWorkaway({
     };
   };
 
-  const { runId } = await ingest({ action: "start", market });
-  progress.runId = runId;
-
+  const items = [];
   try {
     const hostPaths = [];
     for (let page = 1; page <= maxPages; page++) {
       const sep = listPath.includes("?") ? "&" : "?";
       const { doc } = await getDoc(page === 1 ? listPath : `${listPath}${sep}Page=${page}`);
-      const paths = [...new Set([...doc.querySelectorAll('a[href*="/host/"]')].map((a) => a.getAttribute("href")))]
+      // Only the main results list; carousels on the page rotate random hosts.
+      const links = doc.querySelectorAll('#listentry-wrapper a.listentry-title[href^="/en/host/"]');
+      const paths = [...new Set([...links].map((a) => a.getAttribute("href")))]
         .filter((h) => /^\/en\/host\/\w+$/.test(h))
         .filter((h) => !hostPaths.includes(h));
       progress.pages = page;
@@ -144,33 +132,31 @@ async function agentbnbScrapeWorkaway({
     }
     progress.total = hostPaths.length;
 
-    let buffer = [];
-    const flush = async () => {
-      if (!buffer.length) return;
-      const { counts, errors } = await ingest({ action: "batch", runId, items: buffer });
-      for (const k of Object.keys(progress.counts)) progress.counts[k] += counts[k] ?? 0;
-      progress.errors.push(...errors);
-      progress.posted += buffer.length;
-      buffer = [];
-    };
-
-    for (const path of hostPaths) {
+    for (const path of hostPaths.slice(0, limit)) {
       try {
-        buffer.push(await scrapeHost(path));
+        items.push(await scrapeHost(path));
       } catch (err) {
         progress.errors.push({ path, error: String(err) });
       }
       progress.seen++;
-      if (buffer.length >= batchSize) await flush();
       await sleep(delayMs);
     }
-    await flush();
-    progress.run = (await ingest({ action: "finish", runId })).run;
     progress.state = "done";
   } catch (err) {
     progress.state = "failed";
     progress.error = String(err);
-    await ingest({ action: "finish", runId, error: String(err) }).catch(() => {});
   }
+
+  // A partial scrape must not mark unseen listings as gone.
+  const complete = progress.state === "done" && limit === Infinity;
+  const file = { source: "workaway", market, startedAt, finishedAt: new Date().toISOString(), complete, items };
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(new Blob([JSON.stringify(file)], { type: "application/json" }));
+  a.download = `workaway-${market}-${startedAt.replace(/[:.]/g, "-")}.json`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  progress.file = a.download;
+  progress.items = items.length;
   return progress;
 }

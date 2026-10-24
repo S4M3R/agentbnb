@@ -42,13 +42,54 @@ is required, including for local dev.
 ```bash
 pnpm db:generate   # generate a migration from src/db/schema.ts
 pnpm db:migrate    # apply migrations
-pnpm db:seed       # seed sample data
+pnpm db:seed       # upsert the `sources` table (platforms we pull listings from)
 ```
+
+Tables (`src/db/schema.ts`): `users`, `sources`, `listings` (internal and
+scraped, unique on `source_id + external_id`), `listing_photos`,
+`listing_availability`, `external_hosts`, `scrape_runs`, plus
+`user_source_accounts` and `applications` for applying on a user's behalf.
+
+## Scraping
+
+Scrapers run **in a browser tab on the source site** (`scripts/scrapers/*.browser.js`),
+using the site's own same-origin pages/APIs, and download one JSON file per run.
+Load it with:
+
+```bash
+pnpm ingest data/scrapes/<source>-<market>-<timestamp>.json
+```
+
+Each source has an adapter in `src/lib/sources/` that maps raw records to a
+listing. Ingest upserts listings, replaces their photos/availability, records a
+`scrape_runs` row, and (for complete runs) marks listings no longer present as
+`gone`. Listings are tagged with a `market` from their coordinates
+(`src/lib/markets.ts`; currently `sf-bay-area`).
+
+| Source | Kind | Scope | Location |
+|---|---|---|---|
+| TrustedHousesitters | house sit | open upcoming sits in the Bay Area bounds | city centroid |
+| Workaway | work exchange | California host list | host coordinates |
+| Worldpackers | work exchange | California positions | host coordinates |
+
+Login-gated couch-surfing sites (Couchsurfing, BeWelcome, Trustroots,
+Warmshowers) are in `sources` but are not scraped; they need a user's own
+session or a partnership.
+
+### Admin API
+
+Bearer `INGEST_TOKEN`:
+
+- `POST /api/listings` creates a listing on our own network
+- `POST /api/listings/:id/photos` uploads photos (multipart `file`) to Vercel Blob
+- `POST /api/ingest/:source` pushes scraped records directly (`start` / `batch` / `finish`)
 
 ## Roadmap
 
-- [ ] Data model: users/profiles, listings + availability, stay requests, messages, notifications
+- [x] Data model: users, sources, listings + photos + availability, scrape runs, applications
+- [x] Scrapers: TrustedHousesitters, Workaway, Worldpackers (SF Bay Area)
+- [ ] Messages + notifications tables
 - [ ] Agent chat (`/api/chat`) with tools: `listMyPlace`, `searchStays`, `requestStay`, `respondToRequest`, `scheduleStay`
-- [ ] External marketplace adapters (Couchsurfing, BeWelcome, Trustroots)
+- [ ] More sources: Nomador, MindMyHouse, HouseCarers, HelpX; user-session access to Couchsurfing / BeWelcome / Trustroots
 - [ ] Host notifications + inbox
 - [ ] Auth

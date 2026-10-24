@@ -1,44 +1,42 @@
 // Browser-side scraper for TrustedHousesitters.
 //
-// Paste/evaluate this in a tab on https://www.trustedhousesitters.com (it uses
-// the site's own same-origin API), then call:
+// Evaluate in a tab on https://www.trustedhousesitters.com (it uses the site's
+// own same-origin API), then call:
 //
-//   agentbnbScrapeTHS({ endpoint: "http://localhost:3000", token: "<INGEST_TOKEN>" })
+//   agentbnbScrapeTHS()
 //
-// It pages through open, upcoming sits inside the market bounds, fetches each
-// listing's detail, and posts batches to /api/ingest/trustedhousesitters.
-// Progress is exposed on window.__agentbnbProgress.
+// Pages through open, upcoming sits inside the market bounds, fetches each
+// listing's detail, and downloads one `trustedhousesitters-<market>-<timestamp>.json`
+// file. Load it with `pnpm ingest <file>`. Progress is exposed on
+// window.__agentbnbProgress.
 
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 async function agentbnbScrapeTHS({
-  endpoint,
-  token,
   market = "sf-bay-area",
   bounds = { north: 38.35, south: 36.95, east: -121.55, west: -123.1 },
   pageSize = 50,
-  batchSize = 25,
   delayMs = 350,
   maxPages = 100,
-}) {
-  const progress = (window.__agentbnbProgress = {
-    state: "running",
-    pages: 0,
-    seen: 0,
-    posted: 0,
-    counts: { found: 0, created: 0, updated: 0, unchanged: 0, skipped: 0 },
-    errors: [],
-  });
+  limit = Infinity,
+} = {}) {
+  const progress = (window.__agentbnbProgress = { state: "running", pages: 0, seen: 0, errors: [] });
+  const startedAt = new Date().toISOString();
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-  const today = new Date().toISOString().slice(0, 10);
+  const today = startedAt.slice(0, 10);
 
-  const ingest = async (body) => {
-    const res = await fetch(`${endpoint}/api/ingest/trustedhousesitters`, {
-      method: "POST",
-      headers: { "content-type": "application/json", authorization: `Bearer ${token}` },
-      body: JSON.stringify(body),
-    });
-    if (!res.ok) throw new Error(`ingest ${body.action} ${res.status}: ${await res.text()}`);
-    return res.json();
+  // The API occasionally returns an empty/5xx response; retry with backoff.
+  const getJson = async (url, tries = 4) => {
+    for (let i = 1; ; i++) {
+      try {
+        const res = await fetch(url);
+        if (res.status === 404) return null;
+        if (!res.ok) throw new Error(`${url}: ${res.status}`);
+        return await res.json();
+      } catch (err) {
+        if (i >= tries) throw err;
+        await sleep(1000 * 2 ** i);
+      }
+    }
   };
 
   const search = async (page) => {
@@ -49,65 +47,60 @@ async function agentbnbScrapeTHS({
         assignments: { confirmed: false, dateFrom: today },
       },
       facets: [],
-      sort: [],
+      // Without an explicit sort the result order shifts between pages.
+      sort: [{ published: { order: "desc" } }],
       page,
       resultsPerPage: pageSize,
       debug: false,
       stats: [],
     };
-    const res = await fetch(`/api/v3/search/listings/?query=${encodeURIComponent(JSON.stringify(query))}`);
-    if (!res.ok) throw new Error(`search page ${page}: ${res.status}`);
-    return res.json();
+    return getJson(`/api/v3/search/listings/?query=${encodeURIComponent(JSON.stringify(query))}`);
   };
 
-  const { runId } = await ingest({ action: "start", market });
-  progress.runId = runId;
-
+  const items = [];
   try {
     const seenIds = new Set();
-    let buffer = [];
-    const flush = async () => {
-      if (!buffer.length) return;
-      const { counts, errors } = await ingest({ action: "batch", runId, items: buffer });
-      for (const k of Object.keys(progress.counts)) progress.counts[k] += counts[k] ?? 0;
-      progress.errors.push(...errors);
-      progress.posted += buffer.length;
-      buffer = [];
-    };
-
-    for (let page = 1; page <= maxPages; page++) {
+    for (let page = 1; page <= maxPages && seenIds.size < limit; page++) {
       const { results, total } = await search(page);
       progress.pages = page;
       progress.total = total;
       if (!results?.length) break;
 
       for (const summary of results) {
-        if (seenIds.has(summary.id)) continue;
+        if (seenIds.has(summary.id) || seenIds.size >= limit) continue;
         seenIds.add(summary.id);
         progress.seen = seenIds.size;
 
-        const res = await fetch(`/api/v3/search/listings/${summary.id}/`);
-        if (res.ok) {
-          const detail = await res.json();
+        const detail = await getJson(`/api/v3/search/listings/${summary.id}/`).catch((err) => {
+          progress.errors.push({ id: summary.id, error: String(err) });
+          return null;
+        });
+        if (detail) {
           // Search results carry the upcoming open assignments; detail carries history.
           const byId = new Map((detail.assignments ?? []).map((a) => [a.id, a]));
           for (const a of summary.assignments ?? []) byId.set(a.id, { ...byId.get(a.id), ...a });
-          buffer.push({ ...detail, animals: summary.animals, assignments: [...byId.values()] });
-        } else {
-          progress.errors.push({ id: summary.id, error: `detail ${res.status}` });
+          items.push({ ...detail, animals: summary.animals, assignments: [...byId.values()] });
         }
-        if (buffer.length >= batchSize) await flush();
         await sleep(delayMs);
       }
       if (seenIds.size >= total) break;
     }
-    await flush();
-    progress.run = (await ingest({ action: "finish", runId })).run;
     progress.state = "done";
   } catch (err) {
     progress.state = "failed";
     progress.error = String(err);
-    await ingest({ action: "finish", runId, error: String(err) }).catch(() => {});
   }
+
+  // A partial scrape must not mark unseen listings as gone.
+  const complete = progress.state === "done" && limit === Infinity && !progress.errors.length;
+  const file = { source: "trustedhousesitters", market, startedAt, finishedAt: new Date().toISOString(), complete, items };
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(new Blob([JSON.stringify(file)], { type: "application/json" }));
+  a.download = `trustedhousesitters-${market}-${startedAt.replace(/[:.]/g, "-")}.json`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  progress.file = a.download;
+  progress.items = items.length;
   return progress;
 }

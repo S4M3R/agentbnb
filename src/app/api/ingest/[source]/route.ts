@@ -1,10 +1,11 @@
-import { timingSafeEqual } from "node:crypto";
 import { z } from "zod";
+import { isAdminRequest } from "@/lib/admin-auth";
 import { finishRun, recordBatch, startRun, upsertListing } from "@/lib/ingest";
 import { ADAPTERS } from "@/lib/sources";
 
-// The scraper runs inside a browser tab on the source site and posts here,
-// so this endpoint is cross-origin and guarded by a bearer token.
+// Push scraped records straight into the database (alternative to downloading a
+// scrape file and running `pnpm ingest`). Callable cross-origin from a browser
+// tab on the source site; guarded by a bearer token.
 
 export const maxDuration = 300;
 
@@ -25,20 +26,13 @@ function corsHeaders(req: Request) {
   };
 }
 
-function authorized(req: Request) {
-  const expected = process.env.INGEST_TOKEN;
-  const given = req.headers.get("authorization")?.replace(/^Bearer /, "");
-  if (!expected || !given || given.length !== expected.length) return false;
-  return timingSafeEqual(Buffer.from(given), Buffer.from(expected));
-}
-
 export function OPTIONS(req: Request) {
   return new Response(null, { status: 204, headers: corsHeaders(req) });
 }
 
 export async function POST(req: Request, ctx: RouteContext<"/api/ingest/[source]">) {
   const headers = corsHeaders(req);
-  if (!authorized(req)) return Response.json({ error: "unauthorized" }, { status: 401, headers });
+  if (!isAdminRequest(req)) return Response.json({ error: "unauthorized" }, { status: 401, headers });
 
   const { source } = await ctx.params;
   const adapter = ADAPTERS[source];
