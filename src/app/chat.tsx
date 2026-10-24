@@ -4,6 +4,7 @@ import { useChat } from "@ai-sdk/react";
 import { lastAssistantMessageIsCompleteWithToolCalls, type FileUIPart } from "ai";
 import { Fragment, useEffect, useRef, useState, type ReactNode } from "react";
 import type { AgentUIMessage } from "@/lib/agent/tools";
+import { ApplicationCards, ApplicationsLink } from "./application-cards";
 import { ListingPreview, NetworkPicker, PublicationCard } from "./hosting";
 import { LocationRequest } from "./location-request";
 import { PhotoRequest } from "./photo-request";
@@ -75,15 +76,18 @@ export function Chat() {
     <div className="mx-auto flex w-full max-w-3xl flex-1 flex-col px-4">
       <header className="sticky top-0 z-10 flex items-center justify-between bg-background/90 py-4 backdrop-blur">
         <span className="text-sm font-semibold tracking-tight">AgentBnB</span>
-        {messages.length > 0 && (
-          <button
-            type="button"
-            onClick={() => window.location.reload()}
-            className="text-sm text-zinc-500 hover:text-foreground"
-          >
-            New chat
-          </button>
-        )}
+        <div className="flex items-center gap-5">
+          <ApplicationsLink />
+          {messages.length > 0 && (
+            <button
+              type="button"
+              onClick={() => window.location.reload()}
+              className="text-sm text-zinc-500 hover:text-foreground"
+            >
+              New chat
+            </button>
+          )}
+        </div>
       </header>
 
       <main className="flex flex-1 flex-col gap-6 pb-6">
@@ -146,7 +150,7 @@ export function Chat() {
                       if (p.state === "output-error") return <ToolError key={key} label="Search failed" />;
                       return <ToolPending key={key} label={searchLabel(p.input)} />;
                     case "tool-getListing":
-                      if (p.state === "output-available") return <ListingDetail key={key} output={p.output} />;
+                      if (p.state === "output-available") return <ListingDetail key={key} output={p.output} onAsk={send} />;
                       if (p.state === "output-error") return <ToolError key={key} label="Couldn't load listing" />;
                       return <ToolPending key={key} label="Reading the listing…" />;
                     case "tool-askForLocation":
@@ -228,6 +232,28 @@ export function Chat() {
                         );
                       if (p.state === "output-error") return <ToolError key={key} label="Couldn't load your listings" />;
                       return <ToolPending key={key} label="Checking your listings…" />;
+                    case "tool-applyToListings":
+                      if (p.state === "output-available")
+                        return "error" in p.output ? (
+                          <ToolError key={key} label={p.output.error} />
+                        ) : (
+                          <ApplicationCards key={key} cards={p.output.drafts} problems={p.output.problems} />
+                        );
+                      if (p.state === "output-error") return <ToolError key={key} label="Couldn't draft the applications" />;
+                      return <ToolPending key={key} label="Writing your applications…" />;
+                    case "tool-sendApplications":
+                      if (p.state === "output-available")
+                        return "error" in p.output ? (
+                          <ToolError key={key} label={p.output.error} />
+                        ) : (
+                          <ApplicationCards key={key} cards={p.output.applications} />
+                        );
+                      if (p.state === "output-error") return <ToolError key={key} label="Couldn't send" />;
+                      return <ToolPending key={key} label="Sending…" />;
+                    case "tool-getMyApplications":
+                      if (p.state === "output-error") return <ToolError key={key} label="Couldn't load your applications" />;
+                      if (p.state !== "output-available") return <ToolPending key={key} label="Checking your applications…" />;
+                      return null;
                     case "tool-getCoverage":
                       if (p.state === "output-error") return <ToolError key={key} label="Couldn't load coverage" />;
                       if (p.state !== "output-available") return <ToolPending key={key} label="Checking coverage…" />;
@@ -427,6 +453,13 @@ function Card({ listing: l, onAsk }: { listing: ListingCard; onAsk: (text: strin
           >
             Details
           </button>
+          <button
+            type="button"
+            onClick={() => onAsk(`Apply to "${l.title}" for me (listing ${l.id})`)}
+            className="rounded-lg bg-[#ff385c] px-3 py-1 text-xs font-medium text-white hover:bg-[#e00b41]"
+          >
+            Apply
+          </button>
           {l.url && (
             <a href={l.url} target="_blank" rel="noreferrer" className="text-xs text-zinc-500 hover:text-foreground">
               Open ↗
@@ -438,7 +471,7 @@ function Card({ listing: l, onAsk }: { listing: ListingCard; onAsk: (text: strin
   );
 }
 
-function ListingDetail({ output }: { output: ListingOutput }) {
+function ListingDetail({ output, onAsk }: { output: ListingOutput; onAsk: (text: string) => void }) {
   if ("error" in output) return <ToolError label="Listing not found" />;
   return (
     <div className="space-y-2 rounded-xl border border-zinc-200 p-3 dark:border-zinc-800">
@@ -458,16 +491,20 @@ function ListingDetail({ output }: { output: ListingOutput }) {
             {output.host?.name && ` · hosted by ${output.host.name}`}
           </div>
         </div>
-        {output.url && (
-          <a
-            href={output.url}
-            target="_blank"
-            rel="noreferrer"
-            className="shrink-0 rounded-lg bg-foreground px-3 py-1.5 text-xs font-medium text-background"
+        <div className="flex shrink-0 items-center gap-3">
+          {output.url && (
+            <a href={output.url} target="_blank" rel="noreferrer" className="text-xs text-zinc-500 hover:text-foreground">
+              View on {output.source.name} ↗
+            </a>
+          )}
+          <button
+            type="button"
+            onClick={() => onAsk(`Apply to "${output.title}" for me (listing ${output.id})`)}
+            className="rounded-lg bg-[#ff385c] px-3 py-1.5 text-xs font-medium text-white hover:bg-[#e00b41]"
           >
-            Apply on {output.source.name} ↗
-          </a>
-        )}
+            Apply
+          </button>
+        </div>
       </div>
     </div>
   );
