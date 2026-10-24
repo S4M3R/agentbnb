@@ -20,6 +20,7 @@
     "@vercel/blob": "^2.8.2",
     "ai": "^7.0.151",
     "drizzle-orm": "^0.45.4",
+    "maplibre-gl": "^6.15.0",
     "nanoid": "^6.0.2",
     "next": "16.4.3",
     "react": "19.3.0",
@@ -28,6 +29,7 @@
   },
   "devDependencies": {
     "@tailwindcss/turbopack": "^4",
+    "@types/geojson": "^7946.0.16",
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
