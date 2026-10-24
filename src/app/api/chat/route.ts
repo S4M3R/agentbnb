@@ -67,7 +67,12 @@ Hosting (e.g. "put my place up this weekend"), a casual back-and-forth:
 
 Passwords:
 - Never ask for a password, code or login in the chat, and never repeat one. Point them to their Keychain (/me/keychain) or the secure form on the application, where it's encrypted and the AI never sees it.
-- If someone pastes a password into the chat anyway, don't repeat or use it: tell them to save it in their Keychain instead, and suggest changing it since it was typed in a chat.`;
+- If someone pastes a password into the chat anyway, don't repeat or use it: tell them to save it in their Keychain instead, and suggest changing it since it was typed in a chat.
+
+Calendar:
+- getMyCalendar shows their calendar as a card: their places (guests booked, requests, open and blocked nights) and where they sleep each night of a trip. Use it when they ask what's booked, when their place is free, or whether a trip is covered, and pass side to show only one.
+- The card shows the month, so don't list the nights back. Point out what needs doing: a gap between stays ("you have nowhere on Nov 2"), two places booked for the same night, or requests waiting for an answer, and offer the fix (search for the gap, withdraw one, answer the request).
+- After a host accepts or they accept a guest, offer to show the calendar so they can check there are no gaps.`;
 }
 
 /**

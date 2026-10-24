@@ -91,6 +91,9 @@ export function AccountMenu({ onNewChat, me }: { onNewChat: () => void; me?: Me 
             <MenuLink href="/me/profile" onNavigate={close}>
               {me ? "Edit profile" : "Profile"}
             </MenuLink>
+            <MenuLink href="/calendar" onNavigate={close}>
+              Calendar
+            </MenuLink>
             <MenuLink href="/me/checks" onNavigate={close}>
               Checks about you
             </MenuLink>

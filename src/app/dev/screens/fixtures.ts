@@ -1,3 +1,4 @@
+import { buildCalendar } from "@/components/calendar/calendar";
 import type { NightsSummary } from "@/components/nights/nights";
 import type { StayRequest, Trip } from "@/components/requests/types";
 import type { ChatGroup, SidebarUser } from "@/components/shell/sidebar";
@@ -8,7 +9,7 @@ import type { StayCardData, StayPanelData } from "@/components/stays/types";
 const photo = (id: string, w = 900) => `https://images.unsplash.com/photo-${id}?w=${w}&q=70&auto=format&fit=crop`;
 const face = (id: string) => `https://images.unsplash.com/photo-${id}?w=160&h=160&q=70&auto=format&fit=crop&crop=faces`;
 
-export const SCREENS = ["home", "results", "stay", "requests"] as const;
+export const SCREENS = ["home", "results", "stay", "requests", "calendar"] as const;
 export type Screen = (typeof SCREENS)[number];
 export const screenHref = (s: Screen) => `/dev/screens/${s}`;
 
@@ -140,3 +141,40 @@ export const martaPanel: StayPanelData = {
   ],
   rules: ["Shoes off", "Quiet after 23:00", "A cat named Pastel"],
 };
+
+// Two places in SF, a Lisbon–Porto trip with one night uncovered, and a December trip still out.
+export const calendar = buildCalendar({
+  today: "2026-10-24",
+  places: [
+    {
+      id: "mission",
+      title: "Couch in the Mission",
+      photo: photo("1555041469-a586c61ea9bc", 200),
+      open: [
+        { start: "2026-11-06", end: "2026-11-15" },
+        { start: "2026-11-20", end: "2026-12-06" },
+      ],
+      blocked: [{ start: "2026-11-16", end: "2026-11-19" }],
+    },
+    {
+      id: "bernal",
+      title: "Garden studio, Bernal",
+      photo: photo("1505693416388-ac5ce068fe85", 200),
+      open: [{ start: "2026-10-26", end: "2026-11-29" }],
+      blocked: [{ start: "2026-11-25", end: "2026-11-27" }],
+    },
+  ],
+  guests: [
+    { id: "lena", placeId: "mission", name: "Lena Fischer", photo: face("1438761681033-6461ffad8d80"), start: "2026-11-06", end: "2026-11-08", status: "booked", source: "AgentBnB", href: "#" },
+    { id: "sam", placeId: "mission", name: "Sam Okafor", start: "2026-11-12", end: "2026-11-15", status: "request", source: "AgentBnB", href: "#" },
+    { id: "kai", placeId: "mission", name: "Kai Tanaka", photo: face("1500648767791-00dcc994a43e"), start: "2026-11-21", end: "2026-11-24", status: "booked", source: "Couchsurfing", href: "#" },
+    { id: "priya", placeId: "bernal", name: "Priya Nair", photo: face("1544005313-94ddf0286df2"), start: "2026-11-09", end: "2026-11-14", status: "booked", source: "Trustroots", href: "#" },
+    { id: "theo", placeId: "bernal", name: "Theo Martin", start: "2026-11-17", end: "2026-11-19", status: "request", source: "BeWelcome", href: "#" },
+  ],
+  stays: [
+    { id: "marta", title: "Spare room with river light", where: "Alfama, Lisbon", host: "Marta", photo: photo("1522708323590-d24dbb6b0267", 200), start: "2026-10-30", end: "2026-11-01", status: "confirmed", href: screenHref("requests") },
+    { id: "rui", title: "Room by the Douro", where: "Ribeira, Porto", host: "Rui", photo: photo("1595526114035-0d45ed16cfbf", 200), start: "2026-11-02", end: "2026-11-05", status: "confirmed", href: "#" },
+    { id: "tahoe-a", title: "Cabin near Heavenly", where: "South Lake Tahoe", start: "2026-12-18", end: "2026-12-21", status: "pending", href: "#" },
+    { id: "tahoe-b", title: "Bunk room in Truckee", where: "Truckee", start: "2026-12-18", end: "2026-12-21", status: "pending", href: "#" },
+  ],
+});

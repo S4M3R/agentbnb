@@ -100,6 +100,13 @@ export const CheckIcon = (p: IconProps) => (
   </Icon>
 );
 
+export const AlertIcon = (p: IconProps) => (
+  <Icon {...p}>
+    <path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z" />
+    <path d="M12 9v4M12 17h.01" />
+  </Icon>
+);
+
 export const MessageIcon = (p: IconProps) => (
   <Icon {...p}>
     <path d="M7.9 20A9 9 0 1 0 4 16.1L2 22Z" />
@@ -223,7 +230,7 @@ export const BellIcon = (p: IconProps) => (
   </Icon>
 );
 
-export const AlertIcon = (p: IconProps) => (
+export const AlertCircleIcon = (p: IconProps) => (
   <Icon {...p}>
     <circle cx="12" cy="12" r="9" />
     <path d="M12 7.5v5.5M12 16.5h.01" />

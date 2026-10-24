@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useState, type ReactNode } from "react";
 import { SiteIcon } from "@/components/ui/site-name";
 import {
-  AlertIcon,
+  AlertCircleIcon,
   BellIcon,
   BrowserIcon,
   CalendarIcon,
@@ -32,7 +32,7 @@ export type AttentionRow = {
 
 const ICONS: Record<AttentionRow["icon"], ReactNode> = {
   browser: <BrowserIcon size={18} />,
-  alert: <AlertIcon size={18} />,
+  alert: <AlertCircleIcon size={18} />,
   calendar: <CalendarIcon size={18} />,
   suitcase: <SuitcaseIcon size={18} />,
   message: <MessageIcon size={18} />,

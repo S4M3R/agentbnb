@@ -9,6 +9,7 @@ import { AttachmentTray } from "@/components/chat/attachments";
 import { AttentionList } from "@/components/chat/attention";
 import { Composer } from "@/components/chat/composer";
 import { ChatColumn, ComposerDock, Conversation } from "@/components/chat/conversation";
+import { CalendarCard } from "@/components/calendar/calendar-card";
 import { ConnectAgentBanner } from "@/components/chat/connect-agent";
 import { ChatHome } from "@/components/chat/home";
 import { AssistantMessage, AssistantText, ToolStatus, UserMessage } from "@/components/chat/messages";
@@ -618,6 +619,11 @@ function PartView({
       if (p.state === "output-error") return <ToolStatus failed label="Couldn't load your applications." />;
       if (p.state !== "output-available") return <ToolStatus label="Checking your applications…" />;
       return null;
+    case "tool-getMyCalendar":
+      if (p.state === "output-available")
+        return <CalendarCard data={p.output.data} month={p.output.month} side={p.output.side} />;
+      if (p.state === "output-error") return <ToolStatus failed label="Couldn't load your calendar." />;
+      return <ToolStatus label="Checking your calendar…" />;
     case "tool-getCoverage":
       if (p.state === "output-error") return <ToolStatus failed label="Couldn't check coverage." />;
       if (p.state !== "output-available") return <ToolStatus label="Checking what I can search…" />;

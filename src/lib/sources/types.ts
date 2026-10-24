@@ -28,7 +28,8 @@ export type NormalizedListing = Pick<
   | "languages"
   | "attributes"
   | "rating"
-> & {
+> &
+  Partial<Pick<ListingInsert, "pricePeriod">> & {
   externalId: string;
   externalUrl: string;
   host?: {

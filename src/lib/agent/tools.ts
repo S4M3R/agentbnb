@@ -6,6 +6,7 @@ import { clip, highlights, loadPhotos, loadWindows, locationLabel, openWindow, t
 import { MARKETS } from "@/lib/markets";
 import type { WebSession } from "@/lib/session";
 import { applyTools } from "./apply-tools";
+import { calendarTools } from "./calendar-tools";
 import { hostingTools } from "./hosting-tools";
 import { profileTools } from "./profile-tools";
 
@@ -301,7 +302,7 @@ const askForDates = tool({
 export const stayTools = { searchStays, getListing, getCoverage };
 
 export function createAgentTools(session: WebSession) {
-  return { ...stayTools, askForDates, ...hostingTools(session), ...applyTools(session), ...profileTools(session) };
+  return { ...stayTools, askForDates, ...hostingTools(session), ...applyTools(session), ...profileTools(session), ...calendarTools(session) };
 }
 
 export type AgentUIMessage = UIMessage<never, UIDataTypes, InferUITools<ReturnType<typeof createAgentTools>>>;
