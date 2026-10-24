@@ -22,6 +22,7 @@ export function TopNav({ active }: { active: "requests" | "checks" }) {
           agentbnb
         </Link>
         <nav className="flex items-center gap-6">
+          {tab("/applications", "Applications", false)}
           {tab("/requests", "Requests", active === "requests")}
           {tab("/me/checks", "About you", active === "checks")}
         </nav>

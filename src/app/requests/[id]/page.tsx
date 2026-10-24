@@ -132,6 +132,14 @@ async function RequestDetail({ params }: { params: PageProps<"/requests/[id]">["
               platformUrl={external ? r.externalUrl : null}
             />
           </div>
+          {r.applicationId && (
+            <Link
+              href={`/applications/${r.applicationId}`}
+              className="mt-4 block text-center text-[14px] font-medium text-[#222] underline underline-offset-2"
+            >
+              Message {first} and set arrival
+            </Link>
+          )}
           {external && (
             <p className="mt-4 text-[13px] leading-[1.4] text-[#6a6a6a]">
               Accepting here records your answer. Send it to {first} on {r.source.name} too.

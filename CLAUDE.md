@@ -62,16 +62,24 @@ It has two sides:
   `failed` / `removed`, the live-view URL while a browser session is open, and the public URL.
 - **user_source_accounts**: a user's account on an external network; for hosting,
   `credential_ref` is their Browserbase context id (saved cookies, so they log in once).
-- **applications**: for applying on a user's behalf (next phase).
+- **applications**: a guest applying to a listing (any source). `channel`: `internal` (goes to
+  the host's inbox), `external_auto` (the browser agent applies on the site), `external_manual`
+  (the guest did it themself). Status: `draft` → `queued` → `sending` / `needs_user` → `sent` →
+  `accepted` / `declined` → `scheduled`; or `cancelled` (withdrawn) / `failed`.
+- **application_events**: each application's timeline: `status` changes, `message`s between
+  guest and host (guest replies on external sites carry `data.delivery: "pending"` until the
+  browser agent sends them), agent `activity`, and `nudge`s (overlap, no reply in 3 days).
+- **notifications**: in-app inbox (the Applications tab badge); each row is also sent by
+  Web Push (**push_subscriptions**, VAPID keys in env) and email (Resend) when available.
 - **incoming_requests**: stay requests a host received, from any network. Internal ones are
-  mirrored from `applications` when the host opens `/requests`; external ones are imported
+  mirrored from `applications` when the host opens `/requests`; answering one there goes
+  through `setStatus`, so the guest hears about it; external ones are imported
   (`POST /api/v1/requests`), unique per host on `(source_id, external_ref)`.
 - **background_checks** (+ `_findings`, `_events`): a host-requested look at a guest's public
   footprint, run by the agent in `src/lib/checks/agent.ts`. Identity and consistency only:
   never criminal, court or credit records, nothing behind a login. Member guests can read
   checks about themselves (`/me/checks`). Deleted at `expires_at` (30 days after the host
   answers or the stay ends, 90 if never answered).
-- Planned: messages, notifications.
 
 ## Scraping conventions
 - Scrapers are browser scripts (`scripts/scrapers/<source>.browser.js`) run in a
@@ -110,15 +118,28 @@ It has two sides:
 - Next: keep publications in sync when the listing changes, and pull requests from external
   networks into the agent's inbox.
 
+## Applying for stays (`src/lib/applications.ts`, `src/lib/apply-agent.ts`)
+- The agent drafts one application per listing (intro in the guest's voice, tailored with
+  `getListing`); the guest approves with Send / Send all on the chat cards (or says so in chat).
+  Nothing is sent without that approval. Applying to several places at once is encouraged.
+- Every status change goes through `setStatus`, which logs the event and notifies the right
+  side. `/applications` shows tabs (In progress / Confirmed / Closed); pages poll with
+  `router.refresh()`. Hosts get requests in `/requests` (main's inbox, mirrored from internal
+  applications); the conversation and arrival for a member's request live on `/applications/<id>`.
+- External applications: one generic browser agent for every site (`src/lib/browser-agent.ts`,
+  no per-site scripts). A run submits, delivers pending replies, and checks for host news.
+  Runs start only from `POST /api/applications/run` (the client calls it after Send / Continue /
+  reply, and when it shows an application; the cron fans out to it). It's idempotent: a run
+  holds `run_started_at`. Only that route may import `apply-agent.ts` (Stagehand tracing).
+- `/api/cron/applications` (`vercel.ts`; daily on Hobby) starts due checks and sends the
+  "no reply in 3 days" nudges. Opening the app also re-checks (at most every 30 min).
+
 ## Agent tools (AI SDK `tool()`s on `/api/chat`)
-- Done: `searchStays`, `getListing`, `getCoverage`; hosting: `askForLocation`, `askForPhotos`
-  (client-side), `saveListingDraft`, `publishListing`,
+- Search: `searchStays`, `getListing`, `getCoverage`.
+- Hosting: `askForLocation`, `askForPhotos` (client-side), `saveListingDraft`, `publishListing`,
   `recommendNetworks`, `addToNetworks`, `getMyListings`.
-- Planned:
-  - `requestStay`: send a request to an internal host (writes the guest intro, notifies the host)
-  - `respondToRequest`: host accepts/declines and replies
-  - `scheduleStay`: confirm dates/arrival time
-  - `getNotifications` / `getMyRequests`: inbox for both sides
+- Applying: `getMyApplications`, `updateMyProfile`, `applyToListings`, `sendApplications`,
+  `messageHost`, `withdrawApplications`, `scheduleStay`, `respondToRequest` (hosts).
 
 ## Design
 - UI follows `DESIGN.md` (Airbnb-inspired tokens and components, from

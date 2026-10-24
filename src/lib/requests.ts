@@ -1,15 +1,17 @@
 import { and, desc, eq, inArray, lt, ne, sql } from "drizzle-orm";
-import { cookies } from "next/headers";
 import { z } from "zod";
 import { db, schema } from "@/db";
-import { ApiError, authenticate, hashKey } from "@/lib/api-auth";
-import type { SessionUser } from "@/lib/session";
+import { ApiError, authenticate } from "@/lib/api-auth";
+import { setStatus } from "@/lib/applications";
+import { currentUser } from "@/lib/session";
 
 // Stay requests a host receives, from AgentBnB and from the external networks their place is on.
 // Internal ones are mirrored from `applications`; external ones are imported from the host's
 // inbox on each platform (by their agent through /api/v1, or by the browser agent's watcher).
 
-const { incomingRequests: requests, backgroundChecks: checks, listings, sources, users, apiKeys } = schema;
+const { incomingRequests: requests, backgroundChecks: checks, listings, sources } = schema;
+
+export { currentUser };
 
 export type RequestStatus = (typeof schema.requestStatus.enumValues)[number];
 
@@ -18,21 +20,6 @@ const DAY = 24 * 60 * 60 * 1000;
 export const UNDECIDED_RETENTION_DAYS = 90;
 /** Checks are deleted this long after the host decides or the stay ends, whichever is later. */
 export const DECIDED_RETENTION_DAYS = 30;
-
-/**
- * The person behind this browser's session cookie, without creating one. For Server Components,
- * which can't set cookies; see `webSession()` in `@/lib/session` for route handlers.
- */
-export async function currentUser(): Promise<SessionUser | null> {
-  const key = (await cookies()).get("abnb_session")?.value;
-  if (!key?.startsWith("abnb_")) return null;
-  const [row] = await db
-    .select({ id: users.id, name: users.name, email: users.email })
-    .from(apiKeys)
-    .innerJoin(users, eq(users.id, apiKeys.userId))
-    .where(and(eq(apiKeys.keyHash, hashKey(key)), sql`${apiKeys.revokedAt} is null`));
-  return row ?? null;
-}
 
 /** When a check about this request should be deleted. */
 export function checkExpiry(request: { status: RequestStatus; endDate: string | null }, now = new Date()) {
@@ -86,6 +73,7 @@ const latestCheck = sql<{
 
 const requestColumns = {
   id: requests.id,
+  applicationId: requests.applicationId,
   status: requests.status,
   guest: requests.guest,
   guestIsMember: sql<boolean>`${requests.guestUserId} is not null`,
@@ -150,8 +138,8 @@ export async function respondToRequest(hostUserId: string, id: string, decision:
   if (!row) throw new ApiError(404, "REQUEST_NOT_FOUND", "No open request with that id.");
 
   await Promise.all([
-    row.applicationId &&
-      db.update(schema.applications).set({ status }).where(eq(schema.applications.id, row.applicationId)),
+    // The guest's application follows (and they're notified) unless it already moved on.
+    row.applicationId && answerApplication(row.applicationId, status),
     db.update(checks).set({ expiresAt: checkExpiry(row) }).where(eq(checks.requestId, row.id)),
   ]);
   return {
@@ -159,6 +147,14 @@ export async function respondToRequest(hostUserId: string, id: string, decision:
     status: row.status,
     answerOnPlatform: row.applicationId ? null : row.externalUrl,
   };
+}
+
+async function answerApplication(applicationId: string, status: "accepted" | "declined") {
+  const [app] = await db
+    .select({ status: schema.applications.status })
+    .from(schema.applications)
+    .where(eq(schema.applications.id, applicationId));
+  if (app?.status === "sent") await setStatus(applicationId, status, { actor: "host" });
 }
 
 const isoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "YYYY-MM-DD");

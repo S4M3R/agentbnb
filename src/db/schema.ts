@@ -100,13 +100,27 @@ export const publicationStatus = pgEnum("publication_status", [
 ]);
 
 export const applicationStatus = pgEnum("application_status", [
-  "draft",
+  "draft", // the agent wrote it; waiting for the guest to approve it
+  "queued", // approved; waiting for the browser agent (external) or about to go out
+  "sending", // the browser agent is submitting it on the external site
+  "needs_user", // the guest has to log in / answer something in the live browser
   "sent",
   "accepted",
   "declined",
-  "scheduled",
-  "cancelled",
+  "scheduled", // accepted, and guest and host agreed on dates and arrival
+  "cancelled", // withdrawn by the guest
+  "failed",
 ]);
+
+/** What happened on an application's timeline. */
+export const applicationEventKind = pgEnum("application_event_kind", [
+  "status", // status changed; `data` has `from` and `to`
+  "message", // guest and host writing to each other
+  "activity", // something the agent did or noticed ("Maria viewed your application")
+  "nudge", // the agent suggesting a next step ("No reply in 3 days. Follow up?")
+]);
+
+export const eventActor = pgEnum("event_actor", ["guest", "host", "agent"]);
 
 // ---------------------------------------------------------------------------
 // Core
@@ -354,7 +368,7 @@ export const scrapeRuns = pgTable("scrape_runs", {
 });
 
 // ---------------------------------------------------------------------------
-// Applying on behalf of users (next phase, schema ready now)
+// Applying on behalf of users
 // ---------------------------------------------------------------------------
 
 export const userSourceAccounts = pgTable(
@@ -396,12 +410,34 @@ export const applications = pgTable(
     intro: text("intro"),
     channel: applicationChannel("channel").notNull(),
     status: applicationStatus("status").notNull().default("draft"),
+    /** Latest thing the agent did or needs from the guest, shown on the application card. */
+    statusMessage: text("status_message"),
     externalRef: text("external_ref"),
+    /** What guest and host agreed for arrival ("Friday around 6pm"), once scheduled. */
+    arrival: text("arrival"),
+
+    // Browser agent (external_auto): a Browserbase session the guest can watch and take over.
+    browserSessionId: text("browser_session_id"),
+    liveViewUrl: text("live_view_url"),
+    /** Set when the guest taps "Continue" after doing something in the live browser. */
+    userActedAt: timestamp("user_acted_at", { withTimezone: true }),
+    /** A browser run holds the application while this is set (stale after a few minutes). */
+    runStartedAt: timestamp("run_started_at", { withTimezone: true }),
+    error: text("error"),
+    attempts: integer("attempts").notNull().default(0),
+
+    sentAt: timestamp("sent_at", { withTimezone: true }),
+    /** Last time the host did anything: replied, accepted, declined. Drives follow-up nudges. */
+    hostActivityAt: timestamp("host_activity_at", { withTimezone: true }),
+    /** When the watcher should next look at the external site for news. */
+    nextCheckAt: timestamp("next_check_at", { withTimezone: true }),
+    lastCheckedAt: timestamp("last_checked_at", { withTimezone: true }),
     ...timestamps,
   },
   (t) => [
     index("applications_user_idx").on(t.userId),
     index("applications_listing_idx").on(t.listingId),
+    index("applications_next_check_idx").on(t.nextCheckAt),
   ],
 );
 
@@ -576,4 +612,63 @@ export const backgroundCheckEvents = pgTable(
     createdAt: timestamps.createdAt,
   },
   (t) => [index("background_check_events_check_idx").on(t.checkId, t.createdAt)],
+);
+
+/** Timeline of one application: status changes, messages, and what the agent did or noticed. */
+export const applicationEvents = pgTable(
+  "application_events",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    applicationId: uuid("application_id")
+      .notNull()
+      .references(() => applications.id, { onDelete: "cascade" }),
+    kind: applicationEventKind("kind").notNull(),
+    actor: eventActor("actor").notNull(),
+    body: text("body"),
+    data: jsonb("data").$type<Record<string, unknown>>().notNull().default({}),
+    createdAt: timestamps.createdAt,
+  },
+  (t) => [index("application_events_application_idx").on(t.applicationId, t.createdAt)],
+);
+
+// ---------------------------------------------------------------------------
+// Notifications
+// ---------------------------------------------------------------------------
+
+/** In-app inbox. Each row is also pushed and emailed when the person has those set up. */
+export const notifications = pgTable(
+  "notifications",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    applicationId: uuid("application_id").references(() => applications.id, { onDelete: "cascade" }),
+    title: text("title").notNull(),
+    body: text("body"),
+    /** Path to open, e.g. `/applications/<id>`. */
+    url: text("url"),
+    readAt: timestamp("read_at", { withTimezone: true }),
+    pushedAt: timestamp("pushed_at", { withTimezone: true }),
+    emailedAt: timestamp("emailed_at", { withTimezone: true }),
+    createdAt: timestamps.createdAt,
+  },
+  (t) => [index("notifications_user_idx").on(t.userId, t.createdAt)],
+);
+
+/** A browser's Web Push subscription. Deleted when the push service says it's gone. */
+export const pushSubscriptions = pgTable(
+  "push_subscriptions",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    endpoint: text("endpoint").notNull().unique(),
+    p256dh: text("p256dh").notNull(),
+    auth: text("auth").notNull(),
+    userAgent: text("user_agent"),
+    createdAt: timestamps.createdAt,
+  },
+  (t) => [index("push_subscriptions_user_idx").on(t.userId)],
 );

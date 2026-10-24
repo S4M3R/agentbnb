@@ -37,15 +37,7 @@ export async function webSession(): Promise<WebSession> {
   }
   const keyHash = hashKey(key);
   const prefix = key.slice(0, 12);
-
-  async function user() {
-    const [row] = await db
-      .select({ id: users.id, name: users.name, email: users.email })
-      .from(apiKeys)
-      .innerJoin(users, eq(users.id, apiKeys.userId))
-      .where(and(eq(apiKeys.keyHash, keyHash), isNull(apiKeys.revokedAt)));
-    return row ?? null;
-  }
+  const user = () => userByKeyHash(keyHash);
 
   async function ensureUser(name?: string) {
     const existing = await user();
@@ -59,7 +51,7 @@ export async function webSession(): Promise<WebSession> {
     const id = crypto.randomUUID();
     try {
       await db.batch([
-        db.insert(users).values({ id, name: name ?? "AgentBnB host" }),
+        db.insert(users).values({ id, name: name ?? "AgentBnB member" }),
         db.insert(apiKeys).values({ userId: id, keyHash, prefix }),
       ]);
     } catch (err) {
@@ -68,8 +60,23 @@ export async function webSession(): Promise<WebSession> {
       if (winner) return winner;
       throw err;
     }
-    return { id, name: name ?? "AgentBnB host", email: null };
+    return { id, name: name ?? "AgentBnB member", email: null };
   }
 
   return { user, ensureUser };
+}
+
+async function userByKeyHash(keyHash: string): Promise<SessionUser | null> {
+  const [row] = await db
+    .select({ id: users.id, name: users.name, email: users.email })
+    .from(apiKeys)
+    .innerJoin(users, eq(users.id, apiKeys.userId))
+    .where(and(eq(apiKeys.keyHash, keyHash), isNull(apiKeys.revokedAt)));
+  return row ?? null;
+}
+
+/** The person behind this browser, without minting a cookie. For Server Components, which can't set one. */
+export async function currentUser() {
+  const key = (await cookies()).get(COOKIE)?.value;
+  return key?.startsWith("abnb_") ? userByKeyHash(hashKey(key)) : null;
 }
