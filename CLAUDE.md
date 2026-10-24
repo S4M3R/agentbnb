@@ -63,8 +63,7 @@ It has two sides:
 - AI SDK 7 (`ai`, `@ai-sdk/react`) through Vercel AI Gateway using plain
   `"provider/model"` strings. Check `node_modules/ai/docs/` for v7 APIs (e.g.
   `isStepCount`, `toUIMessageStream`), not remembered v5/v6 patterns.
-- Postgres via Drizzle ORM: Neon (`DATABASE_URL`) in production, PGlite
-  fallback locally when `DATABASE_URL` is unset.
+- Postgres via Drizzle ORM on Neon (`DATABASE_URL`, required everywhere,
+  including local dev). Migrations: `pnpm db:generate` / `pnpm db:migrate`.
 - Vercel project: `s4m3rs-projects/agentbnb`. Pull env with `vercel env pull --yes`.
-- Neon is not provisioned yet: its marketplace terms must be accepted in the
-  browser first (see README).
+- Neon (`agentbnb-db`) and Vercel Blob are attached via the Vercel Marketplace.
