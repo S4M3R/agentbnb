@@ -2,27 +2,40 @@
 
 import Link from "next/link";
 import { useEffect, useState, useTransition } from "react";
+import { Button } from "@/components/ui/button";
+import { ChevronRightIcon } from "@/components/ui/icons";
 import type { ApplicationCard } from "@/lib/agent/apply-tools";
 import type { ApplicationStatus } from "@/lib/applications";
 import { sendApplications } from "./applications/actions";
 import { STATUS, formatRange, statusClass } from "./applications/status";
 import { kickRuns } from "./applications/ui";
+import { MetaLine, SiteName } from "@/components/ui/site-name";
 
 // Application drafts and their live status, inside the chat.
 
 type Live = Record<string, { status: ApplicationStatus; statusMessage: string | null }>;
 
+/** Fired when an application changes outside a card (e.g. sent from the side panel), so cards reload. */
+export const APPLICATIONS_CHANGED = "agentbnb:applications-changed";
+
 const SETTLED: ApplicationStatus[] = ["sent", "accepted", "declined", "scheduled", "cancelled", "failed"];
 
-/** Poll the cards' status while any of them is still moving (queued, sending, needs you). */
+/**
+ * The cards' live status. Loads once when the cards appear (a chat restored from history holds the
+ * status from when it was drafted), again when the tab comes back, and every 3s while any card is still
+ * moving (queued, sending, needs you).
+ */
 function useLiveStatus(cards: ApplicationCard[]) {
   const [live, setLive] = useState<Live>({});
   const ids = cards.map((c) => c.id).join(",");
-  const moving = cards.some((c) => !SETTLED.includes(live[c.id]?.status ?? c.status) && (live[c.id]?.status ?? c.status) !== "draft");
+  const moving = cards.some((c) => {
+    const s = live[c.id]?.status ?? c.status;
+    return !SETTLED.includes(s) && s !== "draft";
+  });
   const [poke, setPoke] = useState(0);
 
   useEffect(() => {
-    if (!ids || (!moving && poke === 0)) return;
+    if (!ids) return;
     let stop = false;
     async function load() {
       const res = await fetch(`/api/applications?ids=${ids}`).catch(() => null);
@@ -32,25 +45,47 @@ function useLiveStatus(cards: ApplicationCard[]) {
     }
     load();
     const t = moving ? setInterval(load, 3000) : undefined;
+    const onVisible = () => document.visibilityState === "visible" && load();
+    document.addEventListener("visibilitychange", onVisible);
     return () => {
       stop = true;
       clearInterval(t);
+      document.removeEventListener("visibilitychange", onVisible);
     };
   }, [ids, moving, poke]);
 
-  return { live, refresh: () => setPoke((n) => n + 1) };
+  useEffect(() => {
+    const onChange = () => setPoke((n) => n + 1);
+    window.addEventListener(APPLICATIONS_CHANGED, onChange);
+    return () => window.removeEventListener(APPLICATIONS_CHANGED, onChange);
+  }, []);
+
+  return live;
 }
 
-export function ApplicationCards({ cards, problems }: { cards: ApplicationCard[]; problems?: { error: string }[] }) {
-  const { live, refresh } = useLiveStatus(cards);
-  const queued = cards.filter((c) => c.status === "queued").map((c) => c.id).join(",");
+export function ApplicationCards({
+  cards,
+  problems,
+  openId,
+  onOpen,
+}: {
+  cards: ApplicationCard[];
+  problems?: { error: string }[];
+  /** The application showing in the side panel, outlined. */
+  openId?: string | null;
+  /** Open an application in the side panel instead of going to its page. */
+  onOpen?: (id: string) => void;
+}) {
+  const live = useLiveStatus(cards);
+  // Start runs only for applications the server says are still queued, never from a restored snapshot.
+  const queued = cards.filter((c) => live[c.id]?.status === "queued").map((c) => c.id).join(",");
   useEffect(() => {
     if (queued) kickRuns(queued.split(","));
   }, [queued]);
   const [pending, start] = useTransition();
   const [error, setError] = useState<string | null>(null);
-  const status = (c: ApplicationCard) => live[c.id]?.status ?? c.status;
-  const drafts = cards.filter((c) => status(c) === "draft");
+  // Send only once the server confirms it's still a draft: a restored chat's snapshot may be long sent.
+  const drafts = cards.filter((c) => live[c.id]?.status === "draft");
 
   function send(ids: string[]) {
     setError(null);
@@ -58,32 +93,35 @@ export function ApplicationCards({ cards, problems }: { cards: ApplicationCard[]
       const r = await sendApplications(ids);
       if (!r.ok) setError(r.error);
       else kickRuns(ids); // external ones start in the browser now
-      refresh();
+      window.dispatchEvent(new Event(APPLICATIONS_CHANGED));
     });
   }
 
   return (
     <div className="flex flex-col gap-2">
       {cards.map((c) => (
-        <Card key={c.id} card={c} live={live[c.id]} onSend={() => send([c.id])} sending={pending} />
+        <Card
+          key={c.id}
+          card={c}
+          live={live[c.id]}
+          onSend={() => send([c.id])}
+          sending={pending}
+          selected={openId === c.id}
+          onOpen={onOpen && (() => onOpen(c.id))}
+        />
       ))}
       {problems?.map((p, i) => (
-        <div key={i} className="text-sm text-zinc-500">
+        <div key={i} className="text-sm text-muted">
           {p.error}
         </div>
       ))}
       <div className="flex flex-wrap items-center gap-3">
         {drafts.length > 1 && (
-          <button
-            type="button"
-            disabled={pending}
-            onClick={() => send(drafts.map((d) => d.id))}
-            className="rounded-lg bg-[#ff385c] px-4 py-2 text-sm font-medium text-white hover:bg-[#e00b41] disabled:bg-[#ffd1da]"
-          >
+          <Button size="sm" disabled={pending} onClick={() => send(drafts.map((d) => d.id))}>
             Send all {drafts.length}
-          </button>
+          </Button>
         )}
-        {error && <span className="text-sm text-[#c13515]">{error}</span>}
+        {error && <span className="text-sm text-error">{error}</span>}
       </div>
     </div>
   );
@@ -94,19 +132,26 @@ function Card({
   live,
   onSend,
   sending,
+  selected = false,
+  onOpen,
 }: {
   card: ApplicationCard;
   live?: Live[string];
   onSend: () => void;
   sending: boolean;
+  /** Showing in the side panel. */
+  selected?: boolean;
+  onOpen?: () => void;
 }) {
   const [open, setOpen] = useState(false);
   const status = live?.status ?? c.status;
   const message = live ? live.statusMessage : c.statusMessage;
   const dates = formatRange(c.startDate, c.endDate);
   return (
-    <article className="flex gap-3 rounded-xl border border-zinc-200 p-3 text-sm dark:border-zinc-800">
-      <div className="size-16 shrink-0 overflow-hidden rounded-lg bg-zinc-100 dark:bg-zinc-900">
+    <article
+      className={`flex gap-3 rounded-card border bg-canvas p-3 text-sm transition-colors sm:gap-4 ${selected ? "border-ink" : "border-hairline"}`}
+    >
+      <div className="size-16 shrink-0 overflow-hidden rounded-xl bg-surface-strong sm:size-[72px]">
         {c.photo && (
           // eslint-disable-next-line @next/next/no-img-element -- third-party listing photos
           <img src={c.photo} alt="" loading="lazy" className="h-full w-full object-cover" />
@@ -114,40 +159,60 @@ function Card({
       </div>
       <div className="flex min-w-0 flex-1 flex-col gap-1">
         <div className="flex items-start justify-between gap-2">
-          <div className="truncate font-medium">{c.title}</div>
-          <span className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-medium ${statusClass(status)}`}>
+          <div className="truncate text-[15px] font-semibold text-ink">{c.title}</div>
+          <span className={`shrink-0 rounded-full px-2.5 py-0.5 text-xs font-semibold ${statusClass(status)}`}>
             {STATUS[status].label}
           </span>
         </div>
-        <div className="text-zinc-500">{[c.source, dates].filter(Boolean).join(" · ")}</div>
-        {status !== "draft" && message && <div className="text-zinc-600 dark:text-zinc-400">{message}</div>}
+        <MetaLine className="text-muted" parts={[<SiteName key="s" site={c.sourceId}>{c.source}</SiteName>, dates]} />
+        {status !== "draft" && message && <div className="text-body">{message}</div>}
         {c.intro && status === "draft" && (
           <button
             type="button"
             onClick={() => setOpen(!open)}
-            className={`text-left text-zinc-600 dark:text-zinc-400 ${open ? "whitespace-pre-wrap" : "line-clamp-2"}`}
+            className={`text-left leading-relaxed text-body ${open ? "whitespace-pre-wrap" : "line-clamp-2"}`}
           >
             {c.intro}
           </button>
         )}
-        <div className="flex items-center gap-3 pt-1">
-          {status === "draft" && (
+        <div className="flex items-center gap-3 pt-1.5">
+          {status === "draft" && live && (
             <button
               type="button"
               disabled={sending}
               onClick={onSend}
-              className="rounded-lg bg-foreground px-3 py-1.5 text-xs font-medium text-background disabled:opacity-40"
+              className="inline-flex h-9 items-center rounded-lg bg-ink px-4 text-[13px] font-semibold text-white transition-colors hover:bg-body disabled:opacity-40"
             >
               Send
             </button>
           )}
           {status === "needs_user" ? (
-            <Link href={c.url} className="rounded-lg bg-[#ff385c] px-3 py-1.5 text-xs font-medium text-white">
+            <Link
+              href={c.url}
+              onClick={(e) => {
+                // In the chat, the live browser opens in the side panel; elsewhere, on the application's page.
+                if (!onOpen) return;
+                e.preventDefault();
+                onOpen();
+              }}
+              aria-expanded={onOpen ? selected : undefined}
+              className="inline-flex h-9 items-center rounded-lg bg-rausch px-4 text-[13px] font-semibold text-white transition-colors hover:bg-rausch-active"
+            >
               Open the browser
             </Link>
           ) : (
-            <Link href={c.url} className="text-xs text-zinc-500 hover:text-foreground">
-              {status === "draft" ? "Review" : "Track it"} →
+            <Link
+              href={c.url}
+              onClick={(e) => {
+                if (!onOpen) return;
+                e.preventDefault();
+                onOpen();
+              }}
+              aria-expanded={onOpen ? selected : undefined}
+              className="inline-flex items-center gap-0.5 text-[13px] font-semibold text-ink underline-offset-2 hover:underline"
+            >
+              {status === "draft" ? "Review" : "Track it"}
+              <ChevronRightIcon size={14} strokeWidth={2.4} />
             </Link>
           )}
         </div>
@@ -173,10 +238,10 @@ export function ApplicationsLink() {
     };
   }, []);
   return (
-    <Link href="/applications" className="relative text-sm text-zinc-500 hover:text-foreground">
+    <Link href="/applications" className="relative text-sm font-medium text-muted hover:text-ink">
       Applications
       {unread > 0 && (
-        <span className="absolute -right-3 -top-1.5 flex min-w-4 items-center justify-center rounded-full bg-[#ff385c] px-1 text-[10px] font-semibold leading-4 text-white">
+        <span className="absolute -right-3 -top-1.5 flex min-w-4 items-center justify-center rounded-full bg-rausch px-1 text-[10px] font-semibold leading-4 text-white">
           {unread > 9 ? "9+" : unread}
         </span>
       )}

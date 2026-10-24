@@ -1,7 +1,9 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { Button } from "@/components/ui/button";
 import type { CheckJson } from "./check-types";
+import { SiteName } from "@/components/ui/site-name";
 
 // The background check panel. Before a check it explains what will happen; while it runs it
 // polls the check and shows the profile and findings filling in; afterwards it's the report.
@@ -12,9 +14,9 @@ type CheckEvent = CheckJson["events"][number];
 const POLL_MS = 1500;
 
 const VERDICT = {
-  consistent: { label: "Looks consistent", tone: "bg-emerald-50 text-emerald-800 ring-emerald-200", dot: "bg-emerald-600" },
-  some_gaps: { label: "Some gaps", tone: "bg-amber-50 text-amber-900 ring-amber-200", dot: "bg-amber-500" },
-  red_flags: { label: "Red flags", tone: "bg-[#fff1f0] text-[#b32505] ring-[#ffd1da]", dot: "bg-[#c13515]" },
+  consistent: { label: "Looks consistent", tone: "bg-success-soft text-success ring-success-soft", dot: "bg-success-dot" },
+  some_gaps: { label: "Some gaps", tone: "bg-amber-soft text-amber ring-amber-soft", dot: "bg-amber-dot" },
+  red_flags: { label: "Red flags", tone: "bg-rausch-soft text-error ring-rausch-disabled", dot: "bg-error" },
 } as const;
 
 const SECTIONS: { key: Finding["category"]; title: string }[] = [
@@ -112,29 +114,24 @@ export function BackgroundCheck({
 
   if (!check) {
     return (
-      <section className="rounded-[14px] border border-[#ddd] p-6">
+      <section className="rounded-[14px] border border-hairline p-6">
         <h2 className="text-[22px] font-medium tracking-[-0.44px]">Background check</h2>
-        <p className="mt-2 max-w-xl text-[15px] leading-relaxed text-[#3f3f3f]">
+        <p className="mt-2 max-w-xl text-[15px] leading-relaxed text-body">
           I&apos;ll search the public web for {first}: their profile on this platform, the same person on other
           networks, references and reviews, and anything that doesn&apos;t add up. You&apos;ll watch their profile
           build as I find things. It takes a minute or two.
         </p>
-        <ul className="mt-4 space-y-1.5 text-[14px] text-[#6a6a6a]">
+        <ul className="mt-4 space-y-1.5 text-[14px] text-muted">
           <li>Public information only. No criminal, court or credit records, nothing behind a login.</li>
           {guestIsMember && <li>{first} is an AgentBnB member and can see what the check finds.</li>}
           <li>The report is deleted 30 days after you answer or the stay ends.</li>
         </ul>
         {requestId && (
-          <button
-            type="button"
-            onClick={run}
-            disabled={starting}
-            className="mt-6 h-12 rounded-lg bg-[#ff385c] px-6 text-base font-medium text-white hover:bg-[#e00b41] active:bg-[#e00b41] disabled:bg-[#ffd1da]"
-          >
+          <Button variant="secondary" onClick={run} disabled={starting} className="mt-6 disabled:opacity-50">
             {starting ? "Starting…" : `Run background check`}
-          </button>
+          </Button>
         )}
-        {error && <p className="mt-3 text-[14px] text-[#c13515]">{error}</p>}
+        {error && <p className="mt-3 text-[14px] text-error">{error}</p>}
       </section>
     );
   }
@@ -146,23 +143,23 @@ export function BackgroundCheck({
   const anyFindings = check.findings.length > 0;
 
   return (
-    <section className="rounded-[14px] border border-[#ddd]">
+    <section className="rounded-[14px] border border-hairline">
       <style href="abnb-check-in" precedence="default">{`
         @keyframes abnb-check-in { from { opacity: 0; transform: translateY(4px) } to { opacity: 1; transform: none } }
         .abnb-in { animation: abnb-check-in 240ms cubic-bezier(0.2, 0, 0, 1) both }
         @media (prefers-reduced-motion: reduce) { .abnb-in { animation: none } }
       `}</style>
 
-      <header className="flex flex-wrap items-center justify-between gap-3 border-b border-[#ebebeb] px-6 py-4">
+      <header className="flex flex-wrap items-center justify-between gap-3 border-b border-hairline-soft px-6 py-4">
         <div className="flex items-center gap-3">
           <h2 className="text-[22px] font-medium tracking-[-0.44px]">
             {requestId ? "Background check" : "What the host saw"}
           </h2>
           {running && (
-            <span className="inline-flex items-center gap-2 rounded-full bg-[#f7f7f7] px-3 py-1 text-[12px] font-semibold text-[#3f3f3f]">
+            <span className="inline-flex items-center gap-2 rounded-full bg-surface-soft px-3 py-1 text-[12px] font-semibold text-body">
               <span className="relative flex size-2">
-                <span className="absolute inline-flex size-full animate-ping rounded-full bg-[#ff385c] opacity-60 motion-reduce:animate-none" />
-                <span className="relative inline-flex size-2 rounded-full bg-[#ff385c]" />
+                <span className="absolute inline-flex size-full animate-ping rounded-full bg-rausch opacity-60 motion-reduce:animate-none" />
+                <span className="relative inline-flex size-2 rounded-full bg-rausch" />
               </span>
               Investigating
             </span>
@@ -179,7 +176,7 @@ export function BackgroundCheck({
             type="button"
             onClick={run}
             disabled={starting}
-            className="text-[14px] font-medium text-[#222] underline underline-offset-2 disabled:opacity-50"
+            className="text-[14px] font-medium text-ink underline underline-offset-2 disabled:opacity-50"
           >
             {starting ? "Starting…" : "Run again"}
           </button>
@@ -187,9 +184,9 @@ export function BackgroundCheck({
       </header>
 
       <div className="space-y-8 px-6 py-6">
-        {done && check.summary && <p className="text-[17px] leading-relaxed text-[#222]">{check.summary}</p>}
+        {done && check.summary && <p className="text-[17px] leading-relaxed text-ink">{check.summary}</p>}
         {check.status === "failed" && (
-          <p className="rounded-lg bg-[#fff1f0] px-4 py-3 text-[14px] text-[#b32505]">
+          <p className="rounded-lg bg-rausch-soft px-4 py-3 text-[14px] text-error">
             {check.error ?? "The check didn't finish."}
             {anyFindings && " What it found before stopping is below."}
           </p>
@@ -204,8 +201,8 @@ export function BackgroundCheck({
           if (!items.length) return null;
           return (
             <div key={key}>
-              <h3 className={`text-[16px] font-semibold ${key === "red_flag" ? "text-[#c13515]" : ""}`}>{title}</h3>
-              <ul className="mt-3 divide-y divide-[#ebebeb]">
+              <h3 className={`text-[16px] font-semibold ${key === "red_flag" ? "text-error" : ""}`}>{title}</h3>
+              <ul className="mt-3 divide-y divide-hairline-soft">
                 {items.map((f) => (
                   <FindingRow key={f.id} f={f} />
                 ))}
@@ -215,7 +212,7 @@ export function BackgroundCheck({
         })}
 
         {running && !anyFindings && (
-          <p className="text-[14px] text-[#6a6a6a]">Findings will appear here as soon as I have them.</p>
+          <p className="text-[14px] text-muted">Findings will appear here as soon as I have them.</p>
         )}
 
         {done && check.questions.length > 0 && (
@@ -223,8 +220,8 @@ export function BackgroundCheck({
             <h3 className="text-[16px] font-semibold">Worth asking {first}</h3>
             <ul className="mt-3 space-y-2">
               {check.questions.map((q) => (
-                <li key={q} className="flex gap-3 text-[15px] leading-relaxed text-[#3f3f3f]">
-                  <span className="mt-2.5 size-1.5 shrink-0 rounded-full bg-[#222]" />
+                <li key={q} className="flex gap-3 text-[15px] leading-relaxed text-body">
+                  <span className="mt-2.5 size-1.5 shrink-0 rounded-full bg-ink" />
                   {q}
                 </li>
               ))}
@@ -237,8 +234,8 @@ export function BackgroundCheck({
             <h3 className="text-[16px] font-semibold">Couldn&apos;t verify</h3>
             <ul className="mt-3 space-y-2">
               {check.unverified.map((u) => (
-                <li key={u} className="flex gap-3 text-[15px] leading-relaxed text-[#6a6a6a]">
-                  <span className="mt-2.5 size-1.5 shrink-0 rounded-full border border-[#929292]" />
+                <li key={u} className="flex gap-3 text-[15px] leading-relaxed text-muted">
+                  <span className="mt-2.5 size-1.5 shrink-0 rounded-full border border-muted" />
                   {u}
                 </li>
               ))}
@@ -247,14 +244,14 @@ export function BackgroundCheck({
         )}
 
         {!running && check.events.length > 0 && (
-          <details className="group rounded-lg bg-[#f7f7f7] px-4 py-3">
-            <summary className="cursor-pointer list-none text-[14px] font-medium text-[#222] [&::-webkit-details-marker]:hidden">
+          <details className="group rounded-lg bg-surface-soft px-4 py-3">
+            <summary className="cursor-pointer list-none text-[14px] font-medium text-ink [&::-webkit-details-marker]:hidden">
               How this check was done
-              <span className="font-normal text-[#6a6a6a]">
+              <span className="font-normal text-muted">
                 {" "}
                 · {count(check.events, "search", "search", "searches")}, {count(check.events, "read", "page", "pages")} read
               </span>
-              <span className="float-right text-[#6a6a6a] transition-transform group-open:rotate-180">⌄</span>
+              <span className="float-right text-muted transition-transform group-open:rotate-180">⌄</span>
             </summary>
             <div className="mt-3">
               <Activity events={check.events} />
@@ -263,7 +260,7 @@ export function BackgroundCheck({
         )}
       </div>
 
-      <footer className="border-t border-[#ebebeb] px-6 py-4 text-[13px] leading-[1.4] text-[#6a6a6a]">
+      <footer className="border-t border-hairline-soft px-6 py-4 text-[13px] leading-[1.4] text-muted">
         Public information only: no criminal, court or credit records. A check helps you decide; it isn&apos;t a
         guarantee.
         {guestIsMember && requestId && ` ${first} can see this report.`} Deleted on {formatDate(check.expiresAt)}.
@@ -287,24 +284,24 @@ function ProfileCard({
   const chips = [profile.location, profile.occupation, profile.languages?.join(", ")].filter(Boolean) as string[];
 
   return (
-    <div className="rounded-[14px] bg-[#f7f7f7] p-5">
+    <div className="rounded-[14px] bg-surface-soft p-5">
       <div className="flex items-start justify-between gap-4">
         <div className="min-w-0 flex-1">
           <p className="text-[20px] font-semibold tracking-[-0.18px]">{profile.name ?? fallbackName}</p>
           {profile.headline ? (
-            <p key={profile.headline} className="abnb-in mt-1 text-[15px] text-[#3f3f3f]">
+            <p key={profile.headline} className="abnb-in mt-1 text-[15px] text-body">
               {profile.headline}
             </p>
           ) : (
-            <div className="mt-2 h-4 w-64 max-w-full animate-pulse rounded bg-[#ebebeb]" />
+            <div className="mt-2 h-4 w-64 max-w-full animate-pulse rounded bg-hairline-soft" />
           )}
         </div>
         {identity && (
           <div className="abnb-in shrink-0 text-right" title="How sure the check is that everything here is the same person">
-            <p className="text-[11px] font-semibold uppercase tracking-wide text-[#6a6a6a]">Identity</p>
+            <p className="text-[11px] font-semibold uppercase tracking-wide text-muted">Identity</p>
             <div className="mt-1 flex justify-end gap-1">
               {[0, 1, 2, 3].map((i) => (
-                <span key={i} className={`h-1.5 w-5 rounded-full ${i < identity.bars ? "bg-[#222]" : "bg-[#ddd]"}`} />
+                <span key={i} className={`h-1.5 w-5 rounded-full ${i < identity.bars ? "bg-ink" : "bg-hairline"}`} />
               ))}
             </div>
             <p className="mt-1 text-[13px] font-medium">{identity.label}</p>
@@ -315,7 +312,7 @@ function ProfileCard({
       {chips.length > 0 && (
         <div className="mt-4 flex flex-wrap gap-2">
           {chips.map((c) => (
-            <span key={c} className="abnb-in rounded-full bg-white px-3 py-1 text-[13px] text-[#222] ring-1 ring-[#ddd]">
+            <span key={c} className="abnb-in rounded-full bg-canvas px-3 py-1 text-[13px] text-ink ring-1 ring-hairline">
               {c}
             </span>
           ))}
@@ -327,16 +324,16 @@ function ProfileCard({
           {profile.profiles.map((p) => (
             <li key={p.url} className="abnb-in flex items-baseline gap-2 text-[14px]">
               <a href={p.url} target="_blank" rel="noreferrer" className="shrink-0 font-semibold underline underline-offset-2">
-                {p.platform}
+                <SiteName site={p.url}>{p.platform}</SiteName>
               </a>
-              {p.note && <span className="min-w-0 text-[#6a6a6a]">{p.note}</span>}
+              {p.note && <span className="min-w-0 text-muted">{p.note}</span>}
             </li>
           ))}
         </ul>
       )}
 
       {running && !profile.profiles?.length && (
-        <p className="mt-4 text-[13px] text-[#6a6a6a]">Building their profile from what I find…</p>
+        <p className="mt-4 text-[13px] text-muted">Building their profile from what I find…</p>
       )}
     </div>
   );
@@ -349,18 +346,20 @@ function FindingRow({ f }: { f: Finding }) {
         <p className="text-[15px] font-medium leading-snug">{f.title}</p>
         <span
           className={`mt-0.5 shrink-0 rounded-full px-2 py-0.5 text-[11px] font-semibold ${
-            f.confidence === "high" ? "bg-[#222] text-white" : f.confidence === "medium" ? "bg-[#f2f2f2]" : "text-[#6a6a6a] ring-1 ring-[#ddd]"
+            f.confidence === "high" ? "bg-ink text-white" : f.confidence === "medium" ? "bg-surface-strong" : "text-muted ring-1 ring-hairline"
           }`}
           title="How sure the check is about this"
         >
           {f.confidence === "high" ? "Confirmed" : f.confidence === "medium" ? "Likely" : "Possible"}
         </span>
       </div>
-      {f.detail && <p className="mt-1 text-[14px] leading-[1.5] text-[#3f3f3f]">{f.detail}</p>}
-      <p className="mt-1.5 text-[13px] text-[#6a6a6a]">
+      {f.detail && <p className="mt-1 text-[14px] leading-[1.5] text-body">{f.detail}</p>}
+      <p className="mt-1.5 text-[13px] text-muted">
         {f.sourceUrl ? (
-          <a href={f.sourceUrl} target="_blank" rel="noreferrer" className="underline underline-offset-2 hover:text-[#222]">
-            {f.sourceTitle || hostname(f.sourceUrl)}
+          <a href={f.sourceUrl} target="_blank" rel="noreferrer" className="underline underline-offset-2 hover:text-ink">
+            <SiteName site={f.sourceUrl} size={14}>
+              {f.sourceTitle || hostname(f.sourceUrl)}
+            </SiteName>
           </a>
         ) : (
           (f.sourceTitle ?? "From the request")
@@ -396,13 +395,13 @@ function Activity({ events, live = false }: { events: CheckEvent[]; live?: boole
               strokeLinecap="round"
               strokeLinejoin="round"
               className={`mt-0.5 size-4 shrink-0 ${
-                e.kind === "error" ? "text-[#c13515]" : e.kind === "finding" ? "text-[#222]" : "text-[#929292]"
+                e.kind === "error" ? "text-error" : e.kind === "finding" ? "text-ink" : "text-muted"
               }`}
               aria-hidden
             >
               <path d={KIND_ICON[e.kind] ?? KIND_ICON.note} />
             </svg>
-            <span className={`min-w-0 ${current ? "text-[#222]" : "text-[#6a6a6a]"} ${e.kind === "finding" ? "font-medium text-[#222]" : ""}`}>
+            <span className={`min-w-0 ${current ? "text-ink" : "text-muted"} ${e.kind === "finding" ? "font-medium text-ink" : ""}`}>
               {e.url && e.kind !== "finding" ? (
                 <a href={e.url} target="_blank" rel="noreferrer" className="hover:underline">
                   {e.message}

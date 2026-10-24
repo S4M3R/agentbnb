@@ -5,6 +5,7 @@ import { and, eq } from "drizzle-orm";
 import { z } from "zod";
 import { db, schema } from "@/db";
 import { agentModel } from "@/lib/agent/model";
+import { accessRules, accessTools } from "@/lib/browser-access";
 import { getHostListing, HostingError, type HostListing } from "./listings";
 import { ARRANGEMENT_LABEL, getNetwork, type Network } from "./networks";
 import { updatePublication as update } from "./publications";
@@ -13,9 +14,10 @@ import { updatePublication as update } from "./publications";
 //
 // Each attempt ("run") opens a Browserbase session on the host's saved context for that network
 // (cookies persist between runs, so they log in once), shows its live view in the chat, and lets
-// an AI SDK tool loop drive Stagehand. Anything only the host can do (log in, sign up, solve a
-// CAPTCHA, pay) goes through `askHost`: the run waits while the host acts in the live view and
-// taps Continue. Runs happen in `after()` on a route with maxDuration 300, so each one fits in
+// an AI SDK tool loop drive Stagehand. Logging in only happens when the network asks for it, with
+// the shared access tools (browser-access.ts): the host's Keychain login, a new free account if
+// they allow it, or asking them. Anything only the host can do (CAPTCHA, 2FA, pay) goes through
+// `askHost`: the run waits while the host acts in the live view and taps Continue. Runs happen in `after()` on a route with maxDuration 300, so each one fits in
 // RUN_BUDGET_MS; if time runs out the host taps Continue and a fresh run picks up from there.
 
 const { listings, listingPublications: pubs, userSourceAccounts } = schema;
@@ -92,7 +94,7 @@ export async function runPublication(publicationId: string) {
     const page = (await browser.context.pages())[0] ?? (await browser.context.newPage());
     await page.goto(network.startUrl);
 
-    const outcome = await driveBrowser({ publicationId, network, listing, stagehand, browser });
+    const outcome = await driveBrowser({ publicationId, userId, network, listing, stagehand, browser });
     const now = new Date();
     if (outcome.kind === "published") {
       await update(publicationId, {
@@ -154,12 +156,14 @@ function listingBrief(l: HostListing) {
 
 async function driveBrowser({
   publicationId,
+  userId,
   network,
   listing,
   stagehand,
   browser,
 }: {
   publicationId: string;
+  userId: string;
   network: Network;
   listing: HostListing;
   stagehand: Stagehand;
@@ -189,6 +193,26 @@ async function driveBrowser({
   }
 
   const note = z.string().describe('What you\'re doing, shown to the host, e.g. "Filling in your description".');
+
+  /** Hand the browser to the host and wait for Continue; ends the run if they stop or time runs out. */
+  async function waitForHost(message: string): Promise<"continue" | "stop"> {
+    const asked = new Date();
+    await update(publicationId, { status: "needs_user", statusMessage: message });
+    while (Date.now() < deadline) {
+      await new Promise((r) => setTimeout(r, POLL_MS));
+      const [p] = await db
+        .select({ status: pubs.status, userActedAt: pubs.userActedAt })
+        .from(pubs)
+        .where(eq(pubs.id, publicationId));
+      if (p.status === "live") end({ kind: "host_finished" });
+      else if (p.status === "failed") end({ kind: "stopped" });
+      else if (p.userActedAt && p.userActedAt >= asked) return "continue";
+      else continue;
+      return "stop";
+    }
+    end({ kind: "out_of_time" });
+    return "stop";
+  }
 
   const tools = {
     goto: tool({
@@ -229,31 +253,38 @@ async function driveBrowser({
     }),
     askHost: tool({
       description:
-        "Hand the browser to the host for something only they should do: log in, sign up, verify email, solve a " +
-        "CAPTCHA, accept terms, pay, or choose something the listing doesn't say. They see the live browser. " +
-        "Returns once they tap Continue.",
+        "Hand the browser to the host for something only they can do: solve a CAPTCHA, enter a 2FA code, click an email " +
+        "verification link, decide on a paid membership, accept the network's hosting terms, or choose something the " +
+        "listing doesn't say. They see the live browser. Returns once they tap Continue. For logins use logIn, signUp or askForLogin.",
       inputSchema: z.object({
-        message: z.string().describe('Short and specific, e.g. "Log in to Trustroots in the window, then tap Continue."'),
+        message: z.string().describe('Short and specific, e.g. "Solve the CAPTCHA in the window, then tap Continue."'),
       }),
       execute: async ({ message }) => {
-        const asked = new Date();
-        await update(publicationId, { status: "needs_user", statusMessage: message });
-        while (Date.now() < deadline) {
-          await new Promise((r) => setTimeout(r, POLL_MS));
-          const [p] = await db
-            .select({ status: pubs.status, userActedAt: pubs.userActedAt })
-            .from(pubs)
-            .where(eq(pubs.id, publicationId));
-          if (p.status === "live") end({ kind: "host_finished" });
-          else if (p.status === "failed") end({ kind: "stopped" });
-          else if (p.userActedAt && p.userActedAt >= asked) {
-            const page = await currentPage();
-            return { hostSays: "Done, continue.", url: await page.url() };
-          } else continue;
-          return { hostSays: "Stop." };
-        }
-        end({ kind: "out_of_time" });
-        return { hostSays: "No answer in time." };
+        if ((await waitForHost(message)) !== "continue") return { hostSays: "Stop." };
+        const page = await currentPage();
+        return { hostSays: "Done, continue.", url: await page.url() };
+      },
+    }),
+    // The hosting card has no login or email form: point the host to the Keychain, then Continue.
+    ...accessTools({
+      userId,
+      sourceId: network.id,
+      siteName: network.name,
+      stagehand,
+      step,
+      ask: (message, ask) =>
+        waitForHost(
+          ask.kind === "credentials"
+            ? `${message} Save your ${network.name} login in Keychain (account menu), or log in in the window, then tap Continue.`
+            : ask.kind === "email"
+              ? `${message} Add it in Keychain (account menu), then tap Continue.`
+              : message,
+        ),
+      onSignedIn: async () => {
+        await db
+          .update(userSourceAccounts)
+          .set({ status: "connected", connectedAt: new Date() })
+          .where(and(eq(userSourceAccounts.userId, userId), eq(userSourceAccounts.sourceId, network.id)));
       },
     }),
     finish: tool({
@@ -283,12 +314,13 @@ async function driveBrowser({
       instructions: `You are AgentBnB's browser agent. You publish a host's place on ${network.name} (${network.url}) in a real browser that the host is watching live.
 
 Rules:
-- First check whether the host is logged in to ${network.name}. If not, use askHost to have them log in or sign up. Never type passwords, codes or payment details yourself, and never create accounts on their behalf.
-- Use askHost as well for CAPTCHAs, email verification, terms, payment or membership walls, and choices the listing doesn't answer.
-- Then fill in the hosting details from the listing below and save. Keep the host's wording; adapt length to the field. Skip photo uploads (tell the host in your summary if the site wanted photos).
+- Use askHost for choices the listing doesn't answer (and for the human-only steps below).
+- Fill in the hosting details from the listing below and save. Keep the host's wording; adapt length to the field. Skip photo uploads (tell the host in your summary if the site wanted photos).
 - If the listing already exists there, update it to match instead of creating a duplicate.
 - Check the result with read, then call finish with the public URL. Call giveUp only if it truly can't be done.
 - Keep notes short and friendly; the host reads them.
+
+${accessRules({ siteName: network.name, person: "the host", interactive: true }).replaceAll("askUser", "askHost")}
 
 How ${network.name} works:
 ${network.guide}

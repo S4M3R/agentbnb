@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { Button } from "@/components/ui/button";
+import { CheckIcon, CloseIcon } from "@/components/ui/icons";
 import { uploadPhoto } from "./photo-upload";
 
 // The askForPhotos tool in the chat: the agent's shot list, a full-screen camera that walks the
@@ -11,11 +13,6 @@ export type PhotoRequestInput = { intro: string; shots: Shot[] };
 export type PhotoRequestOutput = { photos: { url: string; shot: string | null }[]; skipped?: boolean };
 
 type Taken = { key: string; shotId: string | null; preview: string; url?: string; failed?: boolean };
-
-const primary =
-  "rounded-lg bg-[#ff385c] px-3.5 py-2 text-sm font-medium text-white transition-colors hover:bg-[#e00b41] disabled:bg-[#ffd1da]";
-const secondary =
-  "rounded-lg border border-zinc-300 px-3.5 py-2 text-sm font-medium transition-colors hover:border-zinc-500 dark:border-zinc-700";
 
 export function PhotoRequest({
   input,
@@ -36,14 +33,14 @@ export function PhotoRequest({
   const shots = input.shots ?? [];
 
   if (done) {
-    if (done.skipped || !done.photos.length) return <div className="text-sm text-zinc-500">Photos skipped for now.</div>;
+    if (done.skipped || !done.photos.length) return <div className="text-sm text-muted">Photos skipped for now.</div>;
     return (
-      <div className="flex flex-wrap gap-1.5">
+      <div className="flex flex-wrap gap-2">
         {done.photos.map((p) => (
           <figure key={p.url} className="w-20">
             {/* eslint-disable-next-line @next/next/no-img-element -- Blob photos */}
-            <img src={p.url} alt={p.shot ?? ""} className="h-20 w-20 rounded-lg object-cover" />
-            {p.shot && <figcaption className="mt-0.5 truncate text-[11px] text-zinc-500">{p.shot}</figcaption>}
+            <img src={p.url} alt={p.shot ?? ""} className="size-20 rounded-xl object-cover" />
+            {p.shot && <figcaption className="mt-1 truncate text-xs text-muted">{p.shot}</figcaption>}
           </figure>
         ))}
       </div>
@@ -81,9 +78,9 @@ export function PhotoRequest({
   }
 
   return (
-    <div className={`space-y-3 rounded-xl border border-zinc-200 p-4 dark:border-zinc-800 ${disabled ? "opacity-50" : ""}`}>
-      <p className="text-sm">{input.intro}</p>
-      <ol className="space-y-2">
+    <div className={`space-y-4 rounded-card border border-hairline bg-canvas p-4 sm:p-5 ${disabled ? "opacity-50" : ""}`}>
+      <p className="text-[15px] leading-relaxed text-ink">{input.intro}</p>
+      <ol className="-mx-1.5 space-y-1">
         {shots.map((s, i) => {
           const t = byShot.get(s.id);
           return (
@@ -92,27 +89,27 @@ export function PhotoRequest({
                 type="button"
                 disabled={disabled}
                 onClick={() => setCamera(i)}
-                className="flex w-full items-center gap-3 rounded-lg p-1 text-left transition-colors hover:bg-zinc-50 dark:hover:bg-zinc-900"
+                className="flex w-full items-center gap-3 rounded-xl p-1.5 text-left transition-colors hover:bg-surface-soft"
               >
                 {t ? (
                   // eslint-disable-next-line @next/next/no-img-element -- local preview
                   <img
                     src={t.preview}
                     alt=""
-                    className={`h-12 w-12 shrink-0 rounded-md object-cover ${t.url ? "" : "animate-pulse opacity-60"}`}
+                    className={`size-14 shrink-0 rounded-lg object-cover ${t.url ? "" : "animate-shimmer"}`}
                   />
                 ) : (
-                  <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-md bg-zinc-100 text-sm font-medium text-zinc-500 dark:bg-zinc-800">
+                  <span className="flex size-14 shrink-0 items-center justify-center rounded-lg bg-surface-strong text-sm font-semibold text-muted">
                     {i + 1}
                   </span>
                 )}
                 <span className="min-w-0 text-sm">
-                  <span className="block font-medium">
+                  <span className="flex flex-wrap items-center gap-x-1.5 font-semibold text-ink">
                     {s.label}
-                    {t?.url && <span className="ml-1.5 text-emerald-600">✓</span>}
-                    {t?.failed && <span className="ml-1.5 text-red-600">upload failed, tap to retake</span>}
+                    {t?.url && <CheckIcon size={15} strokeWidth={2.8} className="text-success-dot" />}
+                    {t?.failed && <span className="font-normal text-error">upload failed, tap to retake</span>}
                   </span>
-                  <span className="block text-zinc-500">{s.tip}</span>
+                  <span className="block text-muted">{s.tip}</span>
                 </span>
               </button>
             </li>
@@ -123,27 +120,27 @@ export function PhotoRequest({
       {!disabled && (
         <div className="flex flex-wrap items-center gap-2">
           {ready.length > 0 ? (
-            <button type="button" className={primary} disabled={uploading} onClick={finish}>
+            <Button size="sm" disabled={uploading} onClick={finish}>
               {uploading ? "Uploading…" : `Share ${ready.length} photo${ready.length === 1 ? "" : "s"}`}
-            </button>
+            </Button>
           ) : (
-            <button type="button" className={primary} onClick={() => setCamera(0)}>
+            <Button size="sm" onClick={() => setCamera(0)}>
               Open camera
-            </button>
+            </Button>
           )}
           {ready.length > 0 && byShot.size < shots.length && (
-            <button type="button" className={secondary} onClick={() => setCamera(shots.findIndex((s) => !byShot.has(s.id)))}>
+            <Button size="sm" variant="secondary" onClick={() => setCamera(shots.findIndex((s) => !byShot.has(s.id)))}>
               Take the rest
-            </button>
+            </Button>
           )}
-          <button type="button" className={secondary} onClick={() => libraryRef.current?.click()}>
+          <Button size="sm" variant="secondary" onClick={() => libraryRef.current?.click()}>
             Upload from library
-          </button>
+          </Button>
           <input ref={libraryRef} type="file" accept="image/*" multiple hidden onChange={(e) => fromLibrary(e.currentTarget.files)} />
           {ready.length === 0 && (
             <button
               type="button"
-              className="text-xs text-zinc-500 hover:text-foreground"
+              className="px-1 text-[13px] font-medium text-muted underline-offset-2 hover:text-ink hover:underline"
               onClick={() => onDone?.({ photos: [], skipped: true })}
             >
               Skip for now
@@ -277,8 +274,13 @@ function CameraView({
 
       <div className="relative bg-gradient-to-b from-black/70 to-transparent px-4 pb-10 pt-[max(1rem,env(safe-area-inset-top))]">
         <div className="flex items-center justify-between text-sm">
-          <button type="button" onClick={onClose} aria-label="Close camera" className="rounded-full bg-black/40 px-3 py-1.5">
-            ✕
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Close camera"
+            className="flex size-10 items-center justify-center rounded-full bg-black/40 backdrop-blur transition-colors hover:bg-black/60"
+          >
+            <CloseIcon size={18} />
           </button>
           <span className="text-white/80">
             {index + 1} of {shots.length}
@@ -287,7 +289,7 @@ function CameraView({
             type="button"
             onClick={() => setFacing((f) => (f === "environment" ? "user" : "environment"))}
             aria-label="Switch camera"
-            className="rounded-full bg-black/40 px-3 py-1.5"
+            className="flex size-10 items-center justify-center rounded-full bg-black/40 text-lg backdrop-blur transition-colors hover:bg-black/60"
           >
             ⟲
           </button>
@@ -301,11 +303,11 @@ function CameraView({
       </div>
 
       {error && (
-        <div className="relative mx-auto mt-auto max-w-sm space-y-3 rounded-xl bg-black/70 p-4 text-center text-sm">
+        <div className="relative mx-auto mt-auto max-w-sm space-y-3 rounded-card bg-black/70 p-5 text-center text-sm backdrop-blur">
           <p>{error}</p>
-          <button type="button" className={primary} onClick={() => fallbackRef.current?.click()}>
+          <Button size="sm" onClick={() => fallbackRef.current?.click()}>
             Take it with your camera app
-          </button>
+          </Button>
         </div>
       )}
       <input
@@ -328,7 +330,7 @@ function CameraView({
                   type="button"
                   onClick={() => setIndex(i)}
                   aria-label={s.label}
-                  className={`relative h-11 w-11 shrink-0 overflow-hidden rounded-md border-2 ${
+                  className={`relative size-11 shrink-0 overflow-hidden rounded-lg border-2 ${
                     i === index ? "border-white" : "border-white/20"
                   }`}
                 >
@@ -352,7 +354,7 @@ function CameraView({
             <button
               type="button"
               onClick={onClose}
-              className={`rounded-full px-4 py-2 text-sm font-medium ${allTaken ? "bg-[#ff385c]" : "bg-black/40"}`}
+              className={`rounded-full px-4 py-2 text-sm font-semibold transition-colors ${allTaken ? "bg-rausch hover:bg-rausch-active" : "bg-black/40 backdrop-blur hover:bg-black/60"}`}
             >
               {allTaken ? "All set" : "Done"}
             </button>

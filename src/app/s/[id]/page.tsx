@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 import { Suspense } from "react";
 import { getShareLink, type SharedListing } from "@/lib/share-links";
 import { SourceBadge, dateRange } from "../../requests/ui";
+import { SiteName } from "@/components/ui/site-name";
 
 // A link an agent sent someone (usually Instinct, in iMessage): the stays it picked, as cards.
 // Most people land here from their phone, so it's laid out for a narrow screen first.
@@ -26,6 +27,7 @@ export async function generateMetadata({ params }: PageProps<"/s/[id]">): Promis
   return {
     title: view.title,
     description,
+    robots: { index: false, follow: false }, // personal picks: previewable when shared, never in search
     openGraph: { title: view.title, description, siteName: "AgentBnB", type: "website" },
     twitter: { card: "summary_large_image", title: view.title, description },
   };
@@ -157,7 +159,9 @@ function Cta({ listing: l }: { listing: SharedListing }) {
       rel="noreferrer"
       className="flex h-12 items-center justify-center rounded-[8px] bg-[#ff385c] px-6 text-[16px] font-medium text-white transition-colors hover:bg-[#e00b41]"
     >
-      Open on {l.source.name}
+      <SiteName site={l.source.id} size={18}>
+        Open on {l.source.name}
+      </SiteName>
     </a>
   );
 }

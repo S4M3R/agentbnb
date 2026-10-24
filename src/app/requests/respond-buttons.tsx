@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { Button } from "@/components/ui/button";
 
 export function RespondButtons({
   requestId,
@@ -36,25 +37,20 @@ export function RespondButtons({
     <div className="space-y-3">
       {open ? (
         <div className="flex gap-3">
-          <button
-            type="button"
-            disabled={busy !== null}
-            onClick={() => respond("accept")}
-            className="h-12 flex-1 rounded-lg bg-[#222] px-6 text-base font-medium text-white hover:bg-black disabled:opacity-50"
-          >
+          <Button disabled={busy !== null} onClick={() => respond("accept")} className="flex-1">
             {busy === "accept" ? "Accepting…" : "Accept"}
-          </button>
-          <button
-            type="button"
+          </Button>
+          <Button
+            variant="secondary"
             disabled={busy !== null}
             onClick={() => respond("decline")}
-            className="h-12 flex-1 rounded-lg border border-[#222] px-6 text-base font-medium hover:bg-[#f7f7f7] disabled:opacity-50"
+            className="flex-1 disabled:opacity-50"
           >
             {busy === "decline" ? "Declining…" : "Decline"}
-          </button>
+          </Button>
         </div>
       ) : (
-        <p className="text-[15px] text-[#3f3f3f]">
+        <p className="text-[15px] text-body">
           You {status === "accepted" ? "accepted" : status === "declined" ? "declined" : "closed"} this request.
         </p>
       )}
@@ -63,12 +59,12 @@ export function RespondButtons({
           href={platformUrl}
           target="_blank"
           rel="noreferrer"
-          className="block text-center text-[14px] font-medium text-[#222] underline underline-offset-2"
+          className="block text-center text-[14px] font-medium text-ink underline underline-offset-2"
         >
           {open ? `Reply on ${platform}` : `Let them know on ${platform}`}
         </a>
       )}
-      {error && <p className="text-[14px] text-[#c13515]">{error}</p>}
+      {error && <p className="text-[14px] text-error">{error}</p>}
     </div>
   );
 }

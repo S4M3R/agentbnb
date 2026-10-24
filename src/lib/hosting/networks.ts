@@ -232,3 +232,33 @@ export function recommendNetworks(listing: {
     };
   });
 }
+
+/**
+ * Browser runs one host can have open at once. Each run holds a Browserbase session for up to
+ * ~5 minutes (RUN_BUDGET_MS); publishing to more sites queues the rest until one frees up.
+ */
+export const MAX_PARALLEL_RUNS = 3;
+
+type PublishedOn = { id: string; network: string; status: string; externalUrl: string | null };
+
+/**
+ * Every network for this listing, as the picker and the listings page show them: the ones that
+ * fit (recommendNetworks order) plus any it's already on that no longer fit, each with its
+ * publication, if any.
+ */
+export function networksForListing<P extends PublishedOn>(listing: {
+  arrangement: Arrangement;
+  countryCode: string | null;
+  forCyclists?: boolean;
+  publications: P[];
+}): (NetworkFit & { publication: P | null })[] {
+  const published = new Map(listing.publications.map((p) => [p.network, p]));
+  const fits = recommendNetworks(listing);
+  const extra = listing.publications
+    .filter((p) => !fits.some((n) => n.id === p.network))
+    .flatMap((p) => {
+      const n = getNetwork(p.network);
+      return n ? [{ id: n.id, name: n.name, url: n.url, pitch: n.pitch, cost: n.cost, recommended: false, reason: `${n.cost}.` }] : [];
+    });
+  return [...fits, ...extra].map((n) => ({ ...n, publication: published.get(n.id) ?? null }));
+}

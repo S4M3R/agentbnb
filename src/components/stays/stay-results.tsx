@@ -2,6 +2,7 @@
 
 import { useRef } from "react";
 import { IconButton } from "@/components/ui/button";
+import { Couchbot } from "@/components/brand/logo";
 import { ChevronLeftIcon, ChevronRightIcon } from "@/components/ui/icons";
 import { StayCard } from "./stay-card";
 import type { StayCardData } from "./types";
@@ -17,6 +18,8 @@ export function StayResults({
   saved,
   onToggleSave,
   onApply,
+  inList,
+  onAddToList,
 }: {
   stays: StayCardData[];
   /** Matches in all, when more were found than shown. */
@@ -25,13 +28,21 @@ export function StayResults({
   saved?: Set<string>;
   onToggleSave?: (stay: StayCardData) => void;
   onApply?: (stay: StayCardData) => void;
+  /** Ids on the guest's apply list; their cards say "Added". */
+  inList?: Set<string>;
+  onAddToList?: (stay: StayCardData) => void;
 }) {
   const rail = useRef<HTMLUListElement>(null);
   const scroll = (dir: 1 | -1) =>
     rail.current?.scrollBy({ left: dir * rail.current.clientWidth * 0.9, behavior: "smooth" });
 
   if (stays.length === 0) {
-    return <p className="rounded-card bg-surface-soft px-4 py-3 text-sm text-muted">No stays matched that search.</p>;
+    return (
+      <p className="flex items-center gap-3 rounded-card bg-surface-soft px-4 py-3 text-sm text-muted">
+        <Couchbot size={32} mood="sleepy" className="shrink-0" />
+        No stays matched that search.
+      </p>
+    );
   }
 
   const more = stays.length > 3;
@@ -62,14 +73,21 @@ export function StayResults({
         ref={rail}
         className="no-scrollbar -mx-4 flex snap-x snap-mandatory gap-4 overflow-x-auto overscroll-x-contain scroll-px-4 px-4 pb-1 sm:mx-0 sm:scroll-px-0 sm:px-0 @2xl:gap-6"
       >
-        {stays.map((s) => (
-          <li key={s.id} className="w-[268px] shrink-0 snap-start @2xl:w-[calc((100%-3rem)/3)]">
+        {stays.map((s, i) => (
+          <li
+            key={s.id}
+            // rise in one after another as the search lands
+            className="w-[268px] shrink-0 snap-start motion-safe:animate-rise @2xl:w-[calc((100%-3rem)/3)]"
+            style={{ animationDelay: `${Math.min(i, 5) * 70}ms` }}
+          >
             <StayCard
               stay={s}
               onOpen={() => onOpen(s)}
               saved={saved?.has(s.id)}
               onToggleSave={onToggleSave && (() => onToggleSave(s))}
               onApply={onApply && (() => onApply(s))}
+              onAddToList={onAddToList && (() => onAddToList(s))}
+              inList={inList?.has(s.id)}
             />
           </li>
         ))}

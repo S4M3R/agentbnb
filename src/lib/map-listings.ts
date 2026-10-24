@@ -6,6 +6,8 @@ export type MapListing = {
   id: string;
   sourceId: string;
   sourceName: string;
+  /** The source's kind: couch, house_sit, home_swap, rental, hostel, ... (`internal` for our own hosts). */
+  sourceKind: string;
   type: string;
   title: string;
   place: string | null;
@@ -20,12 +22,20 @@ export type MapListing = {
   /** Short "what you'd do" line: pets to care for, kinds of help, ... */
   summary: string | null;
   nextAvailable: { start: string; end: string } | null;
+  /** free, exchange (sits, swaps, volunteering) or paid. */
+  priceModel: "free" | "exchange" | "paid";
+  /** Paid listings only, in the minor unit of `currency`. */
+  priceCents: number | null;
+  /** What `priceCents` is per; null when the source doesn't say. */
+  pricePeriod: "night" | "week" | "month" | "stay" | null;
+  currency: string | null;
 };
 
 type Row = {
   id: string;
   source_id: string;
   source_name: string;
+  source_kind: string;
   type: string;
   title: string;
   city: string | null;
@@ -38,6 +48,10 @@ type Row = {
   rating: number | null;
   max_guests: number | null;
   attributes: Record<string, unknown>;
+  price_model: MapListing["priceModel"];
+  price_amount_cents: number | null;
+  price_period: MapListing["pricePeriod"];
+  currency: string | null;
   photo: string | null;
   next_start: string | null;
   next_end: string | null;
@@ -51,9 +65,10 @@ export async function getMapListings(): Promise<MapListing[]> {
 
   const { rows } = await db.execute<Row>(sql`
     select
-      l.id, l.source_id, s.name as source_name, l.type, l.title,
+      l.id, l.source_id, s.name as source_name, s.kind as source_kind, l.type, l.title,
       l.city, l.neighborhood, l.region, l.lat, l.lng, l.location_precision,
       l.external_url, l.rating, l.max_guests, l.attributes,
+      l.price_model, l.price_amount_cents, l.price_period, l.currency,
       p.url as photo,
       a.start_date as next_start, a.end_date as next_end
     from listings l
@@ -73,6 +88,7 @@ export async function getMapListings(): Promise<MapListing[]> {
     id: row.id,
     sourceId: row.source_id,
     sourceName: row.source_name,
+    sourceKind: row.source_kind,
     type: row.type,
     title: row.title,
     place: [row.neighborhood ?? row.city, row.region].filter(Boolean).join(", ") || null,
@@ -85,6 +101,10 @@ export async function getMapListings(): Promise<MapListing[]> {
     maxGuests: row.max_guests,
     summary: summarize(row),
     nextAvailable: row.next_start ? { start: row.next_start, end: row.next_end! } : null,
+    priceModel: row.price_model,
+    priceCents: row.price_model === "paid" && row.price_amount_cents ? row.price_amount_cents : null,
+    pricePeriod: row.price_period,
+    currency: row.currency,
   }));
 }
 

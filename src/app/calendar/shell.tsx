@@ -1,24 +1,9 @@
 "use client";
 
-import { useRouter } from "next/navigation";
 import type { ReactNode } from "react";
-import { AppShell } from "@/components/shell/app-shell";
-import { Sidebar } from "@/components/shell/sidebar";
 import { TopBar } from "@/components/shell/top-bar";
-import { navItems, useUnreadApplications } from "../nav";
 
-/** The app frame around the calendar: the chat's sidebar, a title bar and a scrolling page. */
-export function CalendarShell({ children }: { children: ReactNode }) {
-  const router = useRouter();
-  const unread = useUnreadApplications();
-  return (
-    <AppShell sidebar={<Sidebar onNewChat={() => router.push("/")} nav={navItems(unread)} />}>
-      <CalendarPage>{children}</CalendarPage>
-    </AppShell>
-  );
-}
-
-/** The page column inside the shell; the dev screens reuse it with their own sidebar. */
+/** The calendar's page column inside the old sidebar shell, for the dev screens; the live /calendar uses PageShell. */
 export function CalendarPage({ children }: { children: ReactNode }) {
   return (
     <main className="flex min-w-0 flex-1 flex-col">

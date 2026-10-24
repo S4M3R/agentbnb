@@ -5,7 +5,7 @@ import { buildCalendar } from "@/components/calendar/calendar";
 import { CalendarView } from "@/components/calendar/calendar-view";
 import { calendarToday, getCalendar } from "@/lib/calendar";
 import { currentUser } from "@/lib/session";
-import { CalendarShell } from "./shell";
+import { PageHeading, PageShell } from "@/components/shell/page-shell";
 
 export const metadata: Metadata = {
   title: "Calendar · AgentBnB",
@@ -14,11 +14,15 @@ export const metadata: Metadata = {
 
 export default function CalendarPage({ searchParams }: PageProps<"/calendar">) {
   return (
-    <CalendarShell>
+    <PageShell width="wide">
+      <PageHeading
+        title="Calendar"
+        lead="Who's staying at your place, which nights you've blocked, and where you sleep each night of a trip, so nothing slips through the gaps."
+      />
       <Suspense fallback={<CalendarSkeleton />}>
         <Calendar searchParams={searchParams} />
       </Suspense>
-    </CalendarShell>
+    </PageShell>
   );
 }
 

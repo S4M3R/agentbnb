@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="100" height="100">
+<defs>
+  <linearGradient id="xf" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ff7891"/><stop offset=".55" stop-color="#ff385c"/><stop offset="1" stop-color="#f01a4c"/></linearGradient>
+  <linearGradient id="xs" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#b9093a"/><stop offset=".5" stop-color="#d0134a"/><stop offset="1" stop-color="#a00630"/></linearGradient>
+  <linearGradient id="xr" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff" stop-opacity=".75"/><stop offset=".45" stop-color="#fff" stop-opacity="0"/></linearGradient>
+  <radialGradient id="xh" cx=".3" cy=".22" r=".55"><stop offset="0" stop-color="#fff" stop-opacity=".45"/><stop offset="1" stop-color="#fff" stop-opacity="0"/></radialGradient>
+  <radialGradient id="xd" cx=".4" cy=".3" r=".75"><stop offset="0" stop-color="#fff"/><stop offset=".7" stop-color="#fff"/><stop offset="1" stop-color="#ffd6df"/></radialGradient>
+  <filter id="xb" x="-20%" y="-50%" width="140%" height="200%"><feGaussianBlur stdDeviation="2.2"/></filter>
+  <filter id="xb1" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="1.1"/></filter>
+  <clipPath id="xc"><path d="M50 12C47.8 12 46 13 44.5 14.2L17 36C14.5 38 13 41 13 44.2V76C13 82.6 18.4 88 25 88H75C81.6 88 87 82.6 87 76V44.2C87 41 85.5 38 83 36L55.5 14.2C54 13 52.2 12 50 12Z"/></clipPath>
+</defs>
+<ellipse cx="50" cy="94" rx="36" ry="3.6" fill="#000" opacity=".2" filter="url(#xb)"/>
+<path d="M50 12C47.8 12 46 13 44.5 14.2L17 36C14.5 38 13 41 13 44.2V76C13 82.6 18.4 88 25 88H75C81.6 88 87 82.6 87 76V44.2C87 41 85.5 38 83 36L55.5 14.2C54 13 52.2 12 50 12Z" transform="translate(0 5)" fill="url(#xs)"/>
+<path d="M50 12C47.8 12 46 13 44.5 14.2L17 36C14.5 38 13 41 13 44.2V76C13 82.6 18.4 88 25 88H75C81.6 88 87 82.6 87 76V44.2C87 41 85.5 38 83 36L55.5 14.2C54 13 52.2 12 50 12Z" fill="url(#xf)"/>
+<g clip-path="url(#xc)">
+  <rect width="100" height="100" fill="url(#xh)"/>
+  <path d="M50 12C47.8 12 46 13 44.5 14.2L17 36C14.5 38 13 41 13 44.2V76C13 82.6 18.4 88 25 88H75C81.6 88 87 82.6 87 76V44.2C87 41 85.5 38 83 36L55.5 14.2C54 13 52.2 12 50 12Z" fill="none" stroke="url(#xr)" stroke-width="4"/>
+  <path d="M50 12C47.8 12 46 13 44.5 14.2L17 36C14.5 38 13 41 13 44.2V76C13 82.6 18.4 88 25 88H75C81.6 88 87 82.6 87 76V44.2C87 41 85.5 38 83 36L55.5 14.2C54 13 52.2 12 50 12Z" transform="translate(0 -3)" fill="none" stroke="#a5052f" stroke-opacity=".25" stroke-width="5" filter="url(#xb1)"/>
+</g>
+<circle cx="33" cy="60.5" r="6.6" fill="#9c0530" opacity=".55" filter="url(#xb1)"/><circle cx="33" cy="58" r="6.6" fill="url(#xd)"/><circle cx="50" cy="60.5" r="6.6" fill="#9c0530" opacity=".55" filter="url(#xb1)"/><circle cx="50" cy="58" r="6.6" fill="url(#xd)"/><circle cx="67" cy="60.5" r="6.6" fill="#9c0530" opacity=".55" filter="url(#xb1)"/><circle cx="67" cy="58" r="6.6" fill="url(#xd)"/></svg>

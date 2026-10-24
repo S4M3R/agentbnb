@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import { Avatar } from "@/components/ui/avatar";
 import { BriefcaseIcon, CalendarIcon, CheckIcon, CloseIcon, MountainIcon } from "@/components/ui/icons";
 import type { FitReason, StayPanelData } from "./types";
+import { SiteIcon } from "@/components/ui/site-name";
 
 const FIT_ICON = { work: BriefcaseIcon, sport: MountainIcon, dates: CalendarIcon, check: CheckIcon } as const;
 
@@ -42,7 +43,12 @@ export function StayPanel({
         <PhotoMosaic photos={stay.photos} title={stay.title} />
 
         <h3 className="mt-[22px] text-[26px] font-bold leading-8 tracking-[-0.025em]">{stay.title}</h3>
-        {stay.subtitle && <p className="mt-1.5 text-[15px] text-body">{stay.subtitle}</p>}
+        {stay.subtitle && (
+          <p className="mt-1.5 text-[15px] text-body">
+            {stay.site && <SiteIcon site={stay.site} className="mr-1.5 -mt-0.5 align-middle" />}
+            {stay.subtitle}
+          </p>
+        )}
 
         {stay.host && (
           <div className="mt-5 flex items-center gap-3.5 border-y border-hairline-soft py-[18px]">
@@ -93,7 +99,8 @@ export function StayPanel({
   );
 }
 
-function PhotoMosaic({ photos, title }: { photos: string[]; title: string }) {
+/** The listing photos: a hero and up to four thumbnails. */
+export function PhotoMosaic({ photos, title }: { photos: string[]; title: string }) {
   const [hero, ...rest] = photos;
   if (!hero) return null;
   const thumbs = rest.slice(0, 4);

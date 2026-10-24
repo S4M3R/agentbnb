@@ -14,11 +14,11 @@ export const STATUS: Record<ApplicationStatus, { label: string; tone: "neutral" 
 };
 
 const TONE = {
-  neutral: "bg-zinc-100 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300",
-  busy: "bg-zinc-100 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300 animate-pulse",
-  attention: "bg-[#fff0f3] text-[#e00b41] dark:bg-[#3a0a15] dark:text-[#ff8aa1]",
-  good: "bg-emerald-50 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300",
-  bad: "bg-zinc-100 text-zinc-500 dark:bg-zinc-900 dark:text-zinc-500",
+  neutral: "bg-hairline-soft text-body",
+  busy: "bg-hairline-soft text-body animate-pulse",
+  attention: "bg-rausch-soft text-rausch-deep",
+  good: "bg-success-soft text-success",
+  bad: "bg-surface-strong text-muted",
 };
 
 export function statusClass(status: ApplicationStatus) {

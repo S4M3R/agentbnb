@@ -77,6 +77,8 @@ const requestColumns = {
   status: requests.status,
   guest: requests.guest,
   guestIsMember: sql<boolean>`${requests.guestUserId} is not null`,
+  /** The guest's AgentBnB member id (public profile at /people/[id]), or null for external guests. */
+  guestUserId: requests.guestUserId,
   message: requests.message,
   startDate: requests.startDate,
   endDate: requests.endDate,

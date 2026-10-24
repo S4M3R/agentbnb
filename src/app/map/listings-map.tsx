@@ -1,433 +1,316 @@
 "use client";
 
-import "maplibre-gl/dist/maplibre-gl.css";
-import type { FeatureCollection, Point } from "geojson";
-import type { GeoJSONSource, Map as MapLibreMap } from "maplibre-gl";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { memo, useCallback, useDeferredValue, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import { STAY_CATEGORIES, categoryOf, toMapStayCard, type StayCategory } from "@/components/stays/map-adapters";
+import { StayCard } from "@/components/stays/stay-card";
+import { StayPopupCard } from "@/components/stays/stay-popup-card";
+import type { StayCardData } from "@/components/stays/types";
+import { Button } from "@/components/ui/button";
+import { MapIcon } from "@/components/ui/icons";
 import type { MapListing } from "@/lib/map-listings";
-import { MARKETS } from "@/lib/markets";
+import { CategoryStrip, type CategoryTab } from "./category-strip";
+import { FiltersDialog, type SourceOption } from "./filters-dialog";
+import { MapCanvas, type Bounds } from "./map-canvas";
+import { FiltersIcon, ListIcon } from "./map-icons";
+import { Couchbot } from "@/components/brand/logo";
 
-const STYLE_URL = "https://tiles.openfreemap.org/styles/positron";
+/** Cards rendered per page of the list; the map still plots everything. */
+const PAGE = 60;
 
-const SOURCE_COLORS: Record<string, string> = {
-  internal: "#e11d48",
-  trustedhousesitters: "#0d9488",
-  workaway: "#ea580c",
-  worldpackers: "#7c3aed",
-};
-const FALLBACK_COLOR = "#475569";
+type Category = StayCategory | "all";
 
-const TYPE_LABELS: Record<string, string> = {
-  couch: "Couch",
-  private_room: "Private room",
-  shared_room: "Shared room",
-  entire_place: "Entire place",
-  house_sit: "House sit",
-  work_exchange: "Work exchange",
-  farm_stay: "Farm stay",
-};
-
-/** Max list rows rendered at once; the map still shows everything. */
-const LIST_LIMIT = 150;
-
-type Bounds = { west: number; south: number; east: number; north: number };
-
-const colorFor = (sourceId: string) => SOURCE_COLORS[sourceId] ?? FALLBACK_COLOR;
-
-const dateFormat = new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", timeZone: "UTC" });
-const formatDate = (iso: string) => dateFormat.format(new Date(`${iso}T00:00:00Z`));
-
+/**
+ * Airbnb's search results with a map: a grid of stay cards on the left that follows the map on
+ * the right. Below 744px it's one or the other, switched by a floating "Map" / "List" pill.
+ */
 export function ListingsMap({ listings }: { listings: MapListing[] }) {
-  const containerRef = useRef<HTMLDivElement>(null);
-  const mapRef = useRef<MapLibreMap | null>(null);
-  const [mapReady, setMapReady] = useState(false);
-  const [bounds, setBounds] = useState<Bounds | null>(null);
-  const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [hoveredId, setHoveredId] = useState<string | null>(null);
-
-  const sources = useMemo(() => {
-    const counts = new Map<string, { id: string; name: string; count: number }>();
-    for (const l of listings) {
-      const s = counts.get(l.sourceId) ?? { id: l.sourceId, name: l.sourceName, count: 0 };
-      s.count++;
-      counts.set(l.sourceId, s);
-    }
-    return [...counts.values()].sort((a, b) => b.count - a.count);
-  }, [listings]);
-
+  const [category, setCategory] = useState<Category>("all");
   const [hiddenSources, setHiddenSources] = useState<Set<string>>(() => new Set());
-
-  const shown = useMemo(
-    () => listings.filter((l) => !hiddenSources.has(l.sourceId)),
-    [listings, hiddenSources],
-  );
+  const [bounds, setBounds] = useState<Bounds | null>(null);
+  const [hoveredId, setHoveredId] = useState<string | null>(null);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [visited, setVisited] = useState<Set<string>>(() => new Set());
+  const [phoneView, setPhoneView] = useState<"list" | "map">("list");
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  const phone = useIsPhone();
+  const listRef = useRef<HTMLDivElement>(null);
 
   const byId = useMemo(() => new Map(listings.map((l) => [l.id, l])), [listings]);
-  const selectedListing = selectedId ? byId.get(selectedId) : undefined;
-  // Hiding a source also dismisses a selected listing from it.
-  const selected = selectedListing && !hiddenSources.has(selectedListing.sourceId) ? selectedListing : null;
+  const categories = useMemo(() => new Map(listings.map((l) => [l.id, categoryOf(l)])), [listings]);
+  const cards = useMemo(() => new Map(listings.map((l) => [l.id, toMapStayCard(l)])), [listings]);
 
-  // Listings inside the current viewport, nearest to the map center first.
+  // Only the kinds we actually have listings for get a tab.
+  const tabs = useMemo<CategoryTab[]>(() => {
+    const present = new Set(categories.values());
+    return [
+      { id: "all", label: "All" },
+      ...STAY_CATEGORIES.filter((c) => present.has(c.id)).map((c) => ({ id: c.id, label: c.label })),
+    ];
+  }, [categories]);
+
+  const inCategory = useMemo(
+    () => (category === "all" ? listings : listings.filter((l) => categories.get(l.id) === category)),
+    [listings, categories, category],
+  );
+  const shown = useMemo(
+    () => (hiddenSources.size ? inCategory.filter((l) => !hiddenSources.has(l.sourceId)) : inCategory),
+    [inCategory, hiddenSources],
+  );
+
+  // The list follows the map: what's inside the bounds, nearest the center first.
+  const inBounds = useCallback(
+    (l: MapListing) =>
+      !bounds || (l.lng >= bounds.west && l.lng <= bounds.east && l.lat >= bounds.south && l.lat <= bounds.north),
+    [bounds],
+  );
   const visible = useMemo(() => {
-    if (!bounds) return shown;
+    const list = shown.filter(inBounds);
+    if (!bounds) return list;
     const cx = (bounds.west + bounds.east) / 2;
     const cy = (bounds.south + bounds.north) / 2;
-    return shown
-      .filter((l) => l.lng >= bounds.west && l.lng <= bounds.east && l.lat >= bounds.south && l.lat <= bounds.north)
-      .sort((a, b) => (a.lng - cx) ** 2 + (a.lat - cy) ** 2 - ((b.lng - cx) ** 2 + (b.lat - cy) ** 2));
-  }, [shown, bounds]);
+    const d = (l: MapListing) => (l.lng - cx) ** 2 + (l.lat - cy) ** 2;
+    return list.sort((a, b) => d(a) - d(b));
+  }, [shown, inBounds, bounds]);
 
-  // Create the map once.
+  // Marketplaces for the Filters modal: those with stays of this kind, counted in view.
+  const sourceOptions = useMemo<SourceOption[]>(() => {
+    const options = new Map<string, SourceOption>();
+    for (const l of inCategory) {
+      const o = options.get(l.sourceId) ?? { id: l.sourceId, name: l.sourceName, count: 0 };
+      if (inBounds(l)) o.count++;
+      options.set(l.sourceId, o);
+    }
+    return [...options.values()].sort((a, b) => b.count - a.count || a.name.localeCompare(b.name));
+  }, [inCategory, inBounds]);
+  const hiddenHere = sourceOptions.filter((s) => hiddenSources.has(s.id)).length;
+
+  // A page of cards per view; panning, zooming or filtering starts again from the top.
+  const viewKey = `${category}|${[...hiddenSources].join(",")}|${bounds ? Object.values(bounds).join(",") : ""}`;
+  const [pages, setPages] = useState({ key: viewKey, count: 1 });
+  const pageCount = pages.key === viewKey ? pages.count : 1;
+  const pageItems = useMemo(() => visible.slice(0, PAGE * pageCount), [visible, pageCount]);
+  // Panning re-sorts the list; let the map keep its frame rate while the cards catch up.
+  const page = useDeferredValue(pageItems);
   useEffect(() => {
-    let cancelled = false;
-    let map: MapLibreMap | undefined;
+    listRef.current?.scrollTo({ top: 0 });
+  }, [viewKey]);
 
-    (async () => {
-      const maplibregl = await import("maplibre-gl");
-      if (cancelled || !containerRef.current) return;
-      // MapLibre looks for its worker next to its own module, which doesn't survive
-      // bundling. Ship the (self-contained) worker as a static asset instead.
-      maplibregl.setWorkerUrl(new URL("maplibre-gl/dist/maplibre-gl-worker.mjs", import.meta.url).href);
+  // A selection filtered out of view is dropped.
+  const picked = selectedId ? byId.get(selectedId) : undefined;
+  const selected =
+    picked && (category === "all" || categories.get(picked.id) === category) && !hiddenSources.has(picked.sourceId)
+      ? picked
+      : null;
 
-      map = new maplibregl.Map({
-        container: containerRef.current,
-        style: STYLE_URL,
-        bounds: initialBounds(listings),
-        fitBoundsOptions: { padding: 24 },
-        attributionControl: { compact: true },
-      });
-      map.addControl(new maplibregl.NavigationControl({ showCompass: false }), "top-right");
-      mapRef.current = map;
-
-      const updateBounds = () => {
-        const b = map!.getBounds();
-        setBounds({ west: b.getWest(), south: b.getSouth(), east: b.getEast(), north: b.getNorth() });
-      };
-
-      map.on("load", () => {
-        const m = map!;
-        m.addSource("listings", {
-          type: "geojson",
-          data: toFeatureCollection([]),
-          cluster: true,
-          clusterRadius: 44,
-          clusterMaxZoom: 14,
-        });
-
-        m.addLayer({
-          id: "clusters",
-          type: "circle",
-          source: "listings",
-          filter: ["has", "point_count"],
-          paint: {
-            "circle-color": "#18181b",
-            "circle-opacity": 0.88,
-            "circle-radius": ["step", ["get", "point_count"], 14, 10, 18, 50, 23, 150, 29],
-            "circle-stroke-width": 3,
-            "circle-stroke-color": "rgba(255,255,255,0.9)",
-          },
-        });
-        m.addLayer({
-          id: "cluster-count",
-          type: "symbol",
-          source: "listings",
-          filter: ["has", "point_count"],
-          layout: {
-            "text-field": ["get", "point_count_abbreviated"],
-            "text-font": ["Noto Sans Bold"],
-            "text-size": 12,
-            "text-allow-overlap": true,
-          },
-          paint: { "text-color": "#ffffff" },
-        });
-        m.addLayer({
-          id: "points",
-          type: "circle",
-          source: "listings",
-          filter: ["!", ["has", "point_count"]],
-          paint: {
-            "circle-color": ["get", "color"],
-            "circle-radius": ["interpolate", ["linear"], ["zoom"], 8, 4.5, 14, 7],
-            "circle-stroke-width": 2,
-            "circle-stroke-color": "#ffffff",
-          },
-        });
-        m.addLayer({
-          id: "points-highlight",
-          type: "circle",
-          source: "listings",
-          filter: ["in", ["get", "id"], ["literal", []]],
-          paint: {
-            "circle-color": ["get", "color"],
-            "circle-radius": 10,
-            "circle-stroke-width": 3,
-            "circle-stroke-color": "#ffffff",
-          },
-        });
-
-        m.on("click", "clusters", async (e) => {
-          const feature = e.features?.[0];
-          if (!feature) return;
-          const source = m.getSource<GeoJSONSource>("listings")!;
-          const zoom = await source.getClusterExpansionZoom(feature.properties.cluster_id);
-          m.easeTo({ center: (feature.geometry as Point).coordinates as [number, number], zoom });
-        });
-        m.on("click", "points", (e) => {
-          const id = e.features?.[0]?.properties.id;
-          if (id) setSelectedId(id);
-        });
-        m.on("click", (e) => {
-          const hits = m.queryRenderedFeatures(e.point, { layers: ["points", "clusters"] });
-          if (!hits.length) setSelectedId(null);
-        });
-        for (const layer of ["clusters", "points"]) {
-          m.on("mouseenter", layer, () => (m.getCanvas().style.cursor = "pointer"));
-          m.on("mouseleave", layer, () => (m.getCanvas().style.cursor = ""));
-        }
-        m.on("mousemove", "points", (e) => setHoveredId(e.features?.[0]?.properties.id ?? null));
-        m.on("mouseleave", "points", () => setHoveredId(null));
-        m.on("moveend", updateBounds);
-
-        updateBounds();
-        setMapReady(true);
-      });
-    })();
-
-    return () => {
-      cancelled = true;
-      map?.remove();
-      mapRef.current = null;
-      setMapReady(false);
-    };
-    // The map is created once; data updates flow through the effects below.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+  const markVisited = useCallback((id: string) => {
+    setVisited((prev) => (prev.has(id) ? prev : new Set(prev).add(id)));
   }, []);
-
-  // Push the (filtered) listings into the clustered source.
-  useEffect(() => {
-    if (!mapReady) return;
-    mapRef.current?.getSource<GeoJSONSource>("listings")?.setData(toFeatureCollection(shown));
-  }, [mapReady, shown]);
-
-  // Highlight the hovered and selected pins.
-  useEffect(() => {
-    if (!mapReady) return;
-    const ids = [selectedId, hoveredId].filter(Boolean);
-    mapRef.current?.setFilter("points-highlight", ["in", ["get", "id"], ["literal", ids]]);
-  }, [mapReady, selectedId, hoveredId]);
-
-  // Keep the selected row in view when a pin is clicked.
-  useEffect(() => {
-    if (selectedId) document.getElementById(`listing-${selectedId}`)?.scrollIntoView({ block: "nearest" });
-  }, [selectedId]);
-
-  const focus = (l: MapListing) => {
-    setSelectedId(l.id);
-    const map = mapRef.current;
-    if (!map) return;
-    // Land the pin clear of the listing card: it sits along the bottom on small
-    // screens and on the left (320px wide) from `sm` up.
-    const { clientWidth, clientHeight } = map.getContainer();
-    const offset: [number, number] = clientWidth < 640 ? [0, -clientHeight / 4] : [172, 0];
-    map.flyTo({ center: [l.lng, l.lat], zoom: Math.max(map.getZoom(), 15), speed: 1.6, offset });
+  /** Selecting another pin (or closing the card) leaves the last one gray, as on Airbnb. */
+  const select = (id: string | null) => {
+    if (selectedId && selectedId !== id) markVisited(selectedId);
+    setSelectedId(id);
   };
 
-  const toggleSource = (id: string) =>
-    setHiddenSources((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
+  const changeCategory = (id: Category) => {
+    setCategory(id);
+    setSelectedId(null);
+  };
+
+  const card = selected ? (
+    <StayPopupCard
+      stay={cards.get(selected.id)!}
+      note={selected.approximate ? "Approximate location" : null}
+      cta={selected.url ? { href: selected.url, label: `View on ${selected.sourceName}`, onClick: () => markVisited(selected.id) } : undefined}
+      onClose={() => select(null)}
+      layout={phone ? "row" : "stack"}
+    />
+  ) : null;
+
+  const count = visible.length;
+  const heading = count > 1000 ? "Over 1,000 stays" : count === 0 ? "No stays in view" : `${count.toLocaleString()} ${count === 1 ? "stay" : "stays"} in view`;
+  const sheetOpen = phone && phoneView === "map" && card;
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col md:flex-row">
-      <aside className="order-2 flex min-h-0 flex-1 flex-col border-zinc-200 md:order-1 md:w-96 md:flex-none md:border-r">
-        <header className="space-y-3 border-b border-zinc-200 px-4 pt-4 pb-3">
-          <div className="flex items-baseline justify-between gap-2">
-            <h1 className="text-lg font-semibold tracking-tight">AgentBnB</h1>
-            <p className="text-sm text-zinc-500 tabular-nums">
-              {visible.length.toLocaleString()} of {shown.length.toLocaleString()} in view
-            </p>
-          </div>
-          <div className="flex flex-wrap gap-1.5">
-            {sources.map((s) => {
-              const on = !hiddenSources.has(s.id);
-              return (
-                <button
-                  key={s.id}
-                  type="button"
-                  onClick={() => toggleSource(s.id)}
-                  aria-pressed={on}
-                  className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-medium transition-colors ${
-                    on
-                      ? "border-zinc-300 bg-white text-zinc-800 hover:bg-zinc-50"
-                      : "border-zinc-200 bg-zinc-100 text-zinc-400 hover:text-zinc-600"
-                  }`}
-                >
-                  <span
-                    className="size-2 rounded-full"
-                    style={{ backgroundColor: on ? colorFor(s.id) : "#d4d4d8" }}
-                  />
-                  {s.name}
-                  <span className="tabular-nums text-zinc-400">{s.count}</span>
-                </button>
-              );
-            })}
-          </div>
-        </header>
-
-        <ul className="min-h-0 flex-1 divide-y divide-zinc-100 overflow-y-auto">
-          {visible.slice(0, LIST_LIMIT).map((l) => (
-            <li key={l.id} id={`listing-${l.id}`}>
-              <button
-                type="button"
-                onClick={() => focus(l)}
-                onMouseEnter={() => setHoveredId(l.id)}
-                onMouseLeave={() => setHoveredId(null)}
-                className={`flex w-full gap-3 px-4 py-3 text-left transition-colors hover:bg-zinc-50 ${
-                  l.id === selectedId ? "bg-zinc-100 hover:bg-zinc-100" : ""
-                }`}
-              >
-                <Thumb src={l.photo} className="size-16 shrink-0 rounded-md" />
-                <div className="min-w-0 flex-1">
-                  <p className="line-clamp-2 text-sm font-medium leading-snug">{l.title}</p>
-                  <p className="mt-0.5 truncate text-xs text-zinc-500">
-                    {[l.place, TYPE_LABELS[l.type] ?? l.type].filter(Boolean).join(" · ")}
-                  </p>
-                  <p className="mt-1 flex items-center gap-1.5 text-xs text-zinc-500">
-                    <span className="size-1.5 rounded-full" style={{ backgroundColor: colorFor(l.sourceId) }} />
-                    {l.sourceName}
-                    {l.nextAvailable && (
-                      <span className="text-zinc-400">
-                        · from {formatDate(l.nextAvailable.start)}
-                      </span>
-                    )}
-                  </p>
-                </div>
-              </button>
-            </li>
-          ))}
-          {visible.length > LIST_LIMIT && (
-            <li className="px-4 py-4 text-center text-xs text-zinc-500">
-              {(visible.length - LIST_LIMIT).toLocaleString()} more in this area. Zoom in to narrow it down.
-            </li>
-          )}
-          {visible.length === 0 && (
-            <li className="px-4 py-10 text-center text-sm text-zinc-500">
-              No listings in this area. Zoom out or turn on more sources.
-            </li>
-          )}
-        </ul>
-      </aside>
-
-      <div className="relative order-1 h-[50dvh] md:order-2 md:h-auto md:flex-1">
-        <div ref={containerRef} className="h-full w-full bg-zinc-100" />
-        {selected && <ListingCard listing={selected} onClose={() => setSelectedId(null)} />}
+    <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+      {/* Category strip and Filters, across the top as on Airbnb. */}
+      <div className="relative z-20 flex shrink-0 items-center border-b border-hairline-soft bg-canvas pr-4 nav:pr-6">
+        <CategoryStrip tabs={tabs} active={category} onChange={changeCategory} />
+        <div className="pl-3 nav:pl-6">
+          <button
+            type="button"
+            onClick={() => setFiltersOpen(true)}
+            aria-label={hiddenHere ? `Filters, ${hiddenHere} marketplaces hidden` : "Filters"}
+            className="relative inline-flex h-10 shrink-0 items-center gap-2 rounded-full border border-hairline bg-canvas text-xs font-semibold text-ink transition-[border-color,box-shadow] hover:border-ink max-nav:w-10 max-nav:justify-center nav:rounded-xl nav:h-12 nav:px-4"
+          >
+            <FiltersIcon size={16} />
+            <span className="max-nav:sr-only">Filters</span>
+            {hiddenHere > 0 && (
+              <span className="flex size-5 items-center justify-center rounded-full bg-ink text-[10px] font-bold text-white tabular-nums max-nav:absolute max-nav:-top-1 max-nav:-right-1">
+                {hiddenHere}
+              </span>
+            )}
+          </button>
+        </div>
       </div>
+
+      <div className="relative flex min-h-0 flex-1">
+        {/* The list. On phones it covers the map, which stays mounted (and sized) underneath. */}
+        <section
+          ref={listRef}
+          aria-label="Stays in the map area"
+          className={`@container absolute inset-0 z-10 overflow-y-auto overscroll-contain bg-canvas nav:static nav:z-auto nav:w-[60%] nav:shrink-0 min-[1128px]:w-[58%] ${
+            phoneView === "map" ? "max-nav:hidden" : ""
+          }`}
+        >
+          <div className="px-4 pt-5 pb-28 nav:px-6 nav:pb-12">
+            <h2 className="pb-5 text-base font-semibold tabular-nums">{heading}</h2>
+            {count === 0 ? (
+              <EmptyState
+                filtered={hiddenSources.size > 0 || category !== "all"}
+                onReset={() => {
+                  setHiddenSources(new Set());
+                  changeCategory("all");
+                }}
+              />
+            ) : (
+              <>
+                <ListingGrid page={page} cards={cards} onHover={setHoveredId} onOpen={markVisited} />
+                {count > page.length && (
+                  <div className="flex flex-col items-center gap-3 pt-12">
+                    <p className="text-sm text-muted tabular-nums">
+                      Showing {page.length.toLocaleString()} of {count.toLocaleString()}
+                    </p>
+                    <Button variant="secondary" onClick={() => setPages({ key: viewKey, count: pageCount + 1 })}>
+                      Show more stays
+                    </Button>
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+        </section>
+
+        {/* The map: full screen under the list on phones, the right-hand column from 744px. */}
+        <div className="absolute inset-0 nav:static nav:min-w-0 nav:flex-1">
+          <MapCanvas
+            listings={shown}
+            byId={byId}
+            hoveredId={hoveredId}
+            selectedId={selected?.id ?? null}
+            visited={visited}
+            popup={phone ? undefined : card}
+            onBoundsChange={setBounds}
+            onSelect={select}
+          />
+          {sheetOpen && (
+            <div
+              role="dialog"
+              aria-label={selected?.title}
+              className="absolute inset-x-0 bottom-0 z-20 rounded-t-[20px] bg-canvas px-4 pt-2 pb-[max(1rem,env(safe-area-inset-bottom))] shadow-float transition-transform duration-300 ease-[cubic-bezier(0.2,0.8,0.2,1)] starting:translate-y-full motion-reduce:transition-none"
+            >
+              <div aria-hidden="true" className="mx-auto mb-3 h-1 w-9 rounded-full bg-hairline" />
+              {card}
+            </div>
+          )}
+        </div>
+
+        {/* Phones: the floating ink pill that swaps list and map. */}
+        {!sheetOpen && (
+          <button
+            type="button"
+            onClick={() => {
+              setPhoneView((v) => (v === "list" ? "map" : "list"));
+              setSelectedId(null);
+            }}
+            className="absolute bottom-[max(1.5rem,env(safe-area-inset-bottom))] left-1/2 z-30 inline-flex h-12 -translate-x-1/2 items-center gap-2 rounded-full bg-ink px-5 text-sm font-semibold text-white shadow-float transition-transform active:scale-95 motion-reduce:transition-none nav:hidden"
+          >
+            {phoneView === "list" ? (
+              <>
+                Map <MapIcon size={16} />
+              </>
+            ) : (
+              <>
+                List <ListIcon size={16} />
+              </>
+            )}
+          </button>
+        )}
+      </div>
+
+      <FiltersDialog
+        open={filtersOpen}
+        sources={sourceOptions}
+        hidden={hiddenSources}
+        onClose={() => setFiltersOpen(false)}
+        onApply={(next) => {
+          setHiddenSources(next);
+          setFiltersOpen(false);
+          if (selected && next.has(selected.sourceId)) setSelectedId(null);
+        }}
+      />
     </div>
   );
 }
 
-function ListingCard({ listing: l, onClose }: { listing: MapListing; onClose: () => void }) {
+/** The card grid, memoized so hovering a card (which re-renders the map) doesn't re-render the list. */
+const ListingGrid = memo(function ListingGrid({
+  page,
+  cards,
+  onHover,
+  onOpen,
+}: {
+  page: MapListing[];
+  cards: Map<string, StayCardData>;
+  onHover: (id: string | null) => void;
+  onOpen: (id: string) => void;
+}) {
   return (
-    <article className="absolute inset-x-3 bottom-3 z-10 flex overflow-hidden rounded-xl bg-white shadow-xl ring-1 ring-black/5 sm:inset-x-auto sm:left-3 sm:w-80 sm:flex-col">
-      <Thumb src={l.photo} className="w-24 shrink-0 sm:aspect-[16/9] sm:w-full" />
-      <button
-        type="button"
-        onClick={onClose}
-        aria-label="Close"
-        className="absolute top-2 right-2 flex size-7 items-center justify-center rounded-full bg-white/90 text-zinc-700 shadow-sm hover:bg-white"
-      >
-        <svg viewBox="0 0 16 16" className="size-3.5" fill="none" stroke="currentColor" strokeWidth="2">
-          <path d="M4 4l8 8M12 4l-8 8" strokeLinecap="round" />
-        </svg>
-      </button>
-      <div className="min-w-0 flex-1 space-y-1.5 p-3 pr-10 sm:space-y-2 sm:p-4">
-        <p className="flex items-center gap-1.5 text-xs font-medium text-zinc-500">
-          <span className="size-2 rounded-full" style={{ backgroundColor: colorFor(l.sourceId) }} />
-          {l.sourceName} · {TYPE_LABELS[l.type] ?? l.type}
-          {l.rating != null && <span className="text-zinc-400">· ★ {l.rating.toFixed(1)}</span>}
-        </p>
-        <h2 className="line-clamp-2 text-sm font-semibold leading-snug sm:text-base">{l.title}</h2>
-        <dl className="space-y-1 text-xs text-zinc-600 sm:text-sm">
-          {l.place && (
-            <div>
-              <dt className="sr-only">Location</dt>
-              <dd>
-                {l.place}
-                {l.approximate && <span className="text-zinc-400"> · approximate location</span>}
-              </dd>
-            </div>
-          )}
-          {l.summary && (
-            <div className="hidden sm:block">
-              <dt className="sr-only">What it involves</dt>
-              <dd>{l.summary}</dd>
-            </div>
-          )}
-          {l.nextAvailable && (
-            <div>
-              <dt className="sr-only">Next available</dt>
-              <dd>
-                Open {formatDate(l.nextAvailable.start)} – {formatDate(l.nextAvailable.end)}
-              </dd>
-            </div>
-          )}
-        </dl>
-        {l.url && (
-          <a
-            href={l.url}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="mt-1 inline-flex w-full items-center justify-center rounded-lg bg-zinc-900 px-3 py-1.5 text-xs font-medium text-white hover:bg-zinc-800 sm:py-2 sm:text-sm"
-          >
-            View on {l.sourceName}
-          </a>
-        )}
+    <ul className="grid grid-cols-1 gap-x-4 gap-y-8 @min-[28rem]:grid-cols-2 @min-[50rem]:grid-cols-3">
+      {page.map((l) => (
+        <li key={l.id}>
+          <StayCard
+            stay={cards.get(l.id)!}
+            onOpen={() => onOpen(l.id)}
+            onHoverChange={(on) => onHover(on ? l.id : null)}
+          />
+        </li>
+      ))}
+    </ul>
+  );
+});
+
+function EmptyState({ filtered, onReset }: { filtered: boolean; onReset: () => void }) {
+  return (
+    <div className="flex flex-col items-start gap-4 rounded-card border border-hairline-soft p-6">
+      <div className="flex items-center gap-3.5">
+        <Couchbot size={52} mood="sleepy" className="shrink-0" />
+        <div>
+          <p className="text-base font-semibold">Nothing here yet</p>
+          <p className="mt-1 text-sm text-muted">
+            {filtered ? "Try zooming out, or show every kind of stay and marketplace." : "Try zooming out or moving the map."}
+          </p>
+        </div>
       </div>
-    </article>
+      {filtered && (
+        <Button variant="secondary" size="sm" onClick={onReset}>
+          Remove filters
+        </Button>
+      )}
+    </div>
   );
 }
 
-function Thumb({ src, className }: { src: string | null; className: string }) {
-  const [failedSrc, setFailedSrc] = useState<string | null>(null);
-  if (!src || failedSrc === src) return <div className={`${className} bg-zinc-100`} />;
-  return (
-    // Photos are hotlinked from each marketplace's CDN, so skip next/image's domain allowlist.
-    // eslint-disable-next-line @next/next/no-img-element
-    <img
-      src={src}
-      alt=""
-      loading="lazy"
-      onError={() => setFailedSrc(src)}
-      className={`${className} bg-zinc-100 object-cover`}
-    />
+const PHONE_QUERY = "(max-width: 743.98px)";
+
+/** Below DESIGN.md's 744px tablet breakpoint. False on the server. */
+function useIsPhone() {
+  return useSyncExternalStore(
+    (onChange) => {
+      const mq = window.matchMedia(PHONE_QUERY);
+      mq.addEventListener("change", onChange);
+      return () => mq.removeEventListener("change", onChange);
+    },
+    () => window.matchMedia(PHONE_QUERY).matches,
+    () => false,
   );
-}
-
-function toFeatureCollection(listings: MapListing[]): FeatureCollection<Point> {
-  return {
-    type: "FeatureCollection",
-    features: listings.map((l) => ({
-      type: "Feature",
-      geometry: { type: "Point", coordinates: [l.lng, l.lat] },
-      properties: { id: l.id, color: colorFor(l.sourceId) },
-    })),
-  };
-}
-
-/** Open on the launch market (SF Bay Area); fall back to fitting every listing. */
-function initialBounds(listings: MapListing[]): [number, number, number, number] | undefined {
-  const market = MARKETS[0]?.bounds;
-  if (market) return [market.west, market.south, market.east, market.north];
-  if (!listings.length) return undefined;
-  let [w, s, e, n] = [Infinity, Infinity, -Infinity, -Infinity];
-  for (const l of listings) {
-    w = Math.min(w, l.lng);
-    s = Math.min(s, l.lat);
-    e = Math.max(e, l.lng);
-    n = Math.max(n, l.lat);
-  }
-  return [w, s, e, n];
 }

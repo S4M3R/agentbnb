@@ -28,6 +28,12 @@ export type StayCardData = {
   badge?: string;
   /** Why this stay fits the guest, e.g. "Founder", "Snowboards". */
   reasons?: string[];
+  /** Price line under the card, e.g. { amount: "$45", period: "night" } or { amount: "Free" }. */
+  price?: { amount: string; period?: string };
+  /** The marketplace: a source id ("workaway") or URL. Its favicon shows before the detail line. */
+  site?: string | null;
+  /** Opens the listing on its own site, in a new tab, instead of calling `onOpen` alone. */
+  href?: string | null;
 };
 
 export type FitReason = { icon: "work" | "sport" | "dates" | "check"; title: string; detail?: string };
@@ -44,4 +50,6 @@ export type StayPanelData = {
   dates?: string[];
   rules?: string[];
   description?: string | null;
+  /** The marketplace: a source id or URL. Its favicon shows before the subtitle. */
+  site?: string | null;
 };

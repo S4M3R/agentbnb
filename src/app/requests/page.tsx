@@ -3,27 +3,28 @@ import Link from "next/link";
 import { Suspense } from "react";
 import { currentUser, listRequests, type HostRequest } from "@/lib/requests";
 import { DemoButton } from "./demo-button";
-import { Avatar, SourceBadge, STATUS_LABELS, TopNav, VERDICTS, dateRange, nights, timeAgo } from "./ui";
+import { Avatar, SourceBadge, STATUS_LABELS, VERDICTS, dateRange, nights, timeAgo } from "./ui";
+import { PageHeading, PageShell } from "@/components/shell/page-shell";
+import { Couchbot } from "@/components/brand/logo";
+import { HostingTabs } from "@/components/hosting/hosting-tabs";
 
 export const metadata: Metadata = {
-  title: "Requests · AgentBnB",
+  title: "Requests",
   description: "Everyone who asked to stay at your place, from every network.",
 };
 
 export default function RequestsPage() {
   return (
-    <div className="min-h-dvh bg-white text-[#222]">
-      <TopNav active="requests" />
-      <main className="mx-auto max-w-6xl px-5 pt-8 pb-16">
-        <h1 className="text-[28px] font-bold leading-tight">Requests</h1>
-        <p className="mt-1 text-[15px] text-[#6a6a6a]">
-          Everyone who asked to stay at your place, from AgentBnB and every network your place is on.
-        </p>
-        <Suspense fallback={<ListSkeleton />}>
-          <RequestList />
-        </Suspense>
-      </main>
-    </div>
+    <PageShell width="wide">
+      <HostingTabs active="requests" />
+      <PageHeading
+        title="Host requests"
+        lead="Everyone who asked to stay at your place, from AgentBnB and every network your place is on."
+      />
+      <Suspense fallback={<ListSkeleton />}>
+        <RequestList />
+      </Suspense>
+    </PageShell>
   );
 }
 
@@ -35,7 +36,7 @@ async function RequestList() {
   const open = rows.filter((r) => r.status === "new" || r.status === "replied");
   const answered = rows.filter((r) => !open.includes(r));
   return (
-    <div className="mt-8 space-y-10">
+    <div className="space-y-10">
       <Section title="Needs your answer" rows={open} empty="You're all caught up." />
       {answered.length > 0 && <Section title="Answered" rows={answered} />}
     </div>
@@ -46,7 +47,7 @@ function Section({ title, rows, empty }: { title: string; rows: HostRequest[]; e
   return (
     <section>
       <h2 className="text-[20px] font-semibold tracking-[-0.18px]">
-        {title} <span className="font-normal text-[#6a6a6a]">{rows.length}</span>
+        {title} <span className="font-normal text-muted">{rows.length}</span>
       </h2>
       {rows.length ? (
         <ul className="mt-4 grid gap-4 md:grid-cols-2">
@@ -57,7 +58,7 @@ function Section({ title, rows, empty }: { title: string; rows: HostRequest[]; e
           ))}
         </ul>
       ) : (
-        <p className="mt-3 text-[15px] text-[#6a6a6a]">{empty}</p>
+        <p className="mt-3 text-[15px] text-muted">{empty}</p>
       )}
     </section>
   );
@@ -79,33 +80,33 @@ function RequestCard({ r }: { r: HostRequest }) {
   return (
     <Link
       href={`/requests/${r.id}`}
-      className="flex h-full flex-col gap-4 rounded-[14px] border border-[#ddd] p-5 transition-shadow hover:shadow-[rgba(0,0,0,0.02)_0_0_0_1px,rgba(0,0,0,0.04)_0_2px_6px,rgba(0,0,0,0.1)_0_4px_8px]"
+      className="flex h-full flex-col gap-4 rounded-[14px] border border-hairline p-5 transition-shadow hover:shadow-float"
     >
       <div className="flex items-start gap-3">
         <Avatar name={g.name} src={g.photoUrl} />
         <div className="min-w-0 flex-1">
           <div className="flex items-baseline justify-between gap-2">
             <p className="truncate text-base font-semibold">{g.name}</p>
-            <span className="shrink-0 text-[13px] text-[#6a6a6a]">{timeAgo(r.receivedAt)}</span>
+            <span className="shrink-0 text-[13px] text-muted">{timeAgo(r.receivedAt)}</span>
           </div>
           <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5">
             <SourceBadge id={r.source.id} name={r.source.name} />
-            {g.location && <span className="text-[13px] text-[#6a6a6a]">· {g.location}</span>}
+            {g.location && <span className="text-[13px] text-muted">· {g.location}</span>}
           </div>
         </div>
       </div>
 
-      {r.message && <p className="line-clamp-3 text-[14px] leading-[1.43] text-[#3f3f3f]">{r.message}</p>}
+      {r.message && <p className="line-clamp-3 text-[14px] leading-[1.43] text-body">{r.message}</p>}
 
-      <div className="mt-auto flex flex-wrap items-center justify-between gap-2 border-t border-[#ebebeb] pt-3 text-[13px]">
-        <span className="text-[#222]">
+      <div className="mt-auto flex flex-wrap items-center justify-between gap-2 border-t border-hairline-soft pt-3 text-[13px]">
+        <span className="text-ink">
           {facts.join(" · ") || "No dates yet"}
-          {platform.length > 0 && <span className="text-[#6a6a6a]"> · {platform.join(", ")}</span>}
+          {platform.length > 0 && <span className="text-muted"> · {platform.join(", ")}</span>}
         </span>
         <span className="flex items-center gap-2">
           <CheckBadge check={r.check} />
           {r.status !== "new" && (
-            <span className="rounded-full bg-[#f2f2f2] px-2.5 py-0.5 text-[11px] font-semibold">
+            <span className="rounded-full bg-surface-strong px-2.5 py-0.5 text-[11px] font-semibold">
               {STATUS_LABELS[r.status]}
             </span>
           )}
@@ -119,8 +120,8 @@ function CheckBadge({ check }: { check: HostRequest["check"] }) {
   if (!check) return null;
   if (check.status === "running") {
     return (
-      <span className="inline-flex items-center gap-1.5 text-[12px] font-semibold text-[#6a6a6a]">
-        <span className="size-1.5 animate-pulse rounded-full bg-[#ff385c]" />
+      <span className="inline-flex items-center gap-1.5 text-[12px] font-semibold text-muted">
+        <span className="size-1.5 animate-pulse rounded-full bg-rausch" />
         Checking…
       </span>
     );
@@ -137,9 +138,10 @@ function CheckBadge({ check }: { check: HostRequest["check"] }) {
 
 function Empty() {
   return (
-    <div className="mt-10 rounded-[14px] border border-dashed border-[#ddd] px-6 py-14 text-center">
+    <div className="flex flex-col items-center rounded-[14px] border border-dashed border-hairline px-6 py-14 text-center">
+      <Couchbot size={72} mood="sleepy" className="mb-3" />
       <p className="text-[20px] font-semibold">No requests yet</p>
-      <p className="mx-auto mt-2 max-w-md text-[15px] text-[#6a6a6a]">
+      <p className="mx-auto mt-2 max-w-md text-[15px] text-muted">
         When someone asks to stay at your place, on AgentBnB or on Couchsurfing, Trustroots and the rest, the
         request shows up here. You can run a background check on anyone before you answer.
       </p>
@@ -150,9 +152,9 @@ function Empty() {
 
 function ListSkeleton() {
   return (
-    <div className="mt-8 grid gap-4 md:grid-cols-2">
+    <div className="grid gap-4 md:grid-cols-2">
       {[0, 1, 2, 3].map((i) => (
-        <div key={i} className="h-48 animate-pulse rounded-[14px] bg-[#f7f7f7]" />
+        <div key={i} className="h-48 animate-pulse rounded-[14px] bg-surface-soft" />
       ))}
     </div>
   );

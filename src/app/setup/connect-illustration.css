@@ -1,0 +1,153 @@
+/* The hero on /setup pages (classes prefixed setup-connect-; this file is global CSS): the agent's app icon and Couchbot with a dotted line between them.
+   A pulse runs from the agent to AgentBnB and back every 3 s, each tile bumping as it lands; the
+   same motion as the link preview GIFs (tools/setup-previews.tsx). Still under reduced motion. */
+
+.setup-connect-scene {
+  --cycle: 3s;
+  --step: 70ms;
+}
+
+.setup-connect-dot {
+  position: relative;
+  width: 10px;
+  height: 10px;
+  border-radius: 9999px;
+  background: color-mix(in srgb, var(--color-rausch) 26%, white);
+}
+
+/* The two waves are pseudo-elements so each dot can light up twice per cycle at its own time. */
+.setup-connect-dot::before,
+.setup-connect-dot::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: var(--color-rausch);
+  opacity: 0;
+}
+
+.setup-connect-tile {
+  position: relative;
+}
+
+/* The ring that ripples out of a tile when the pulse lands. */
+.setup-connect-tile::after {
+  content: "";
+  position: absolute;
+  inset: -4px;
+  border-radius: 28px;
+  border: 2px solid var(--color-rausch);
+  opacity: 0;
+  pointer-events: none;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .setup-connect-dot::before {
+    animation: setup-connect-wave-out var(--cycle) linear infinite;
+    animation-delay: calc(var(--i) * var(--step));
+  }
+  .setup-connect-dot::after {
+    animation: setup-connect-wave-back var(--cycle) linear infinite;
+    animation-delay: calc((6 - var(--i)) * var(--step));
+  }
+  .setup-connect-agentbnb {
+    animation: setup-connect-bump-agentbnb var(--cycle) cubic-bezier(0.2, 0.8, 0.2, 1) infinite;
+  }
+  .setup-connect-agentbnb::after {
+    animation: setup-connect-ring-agentbnb var(--cycle) ease-out infinite;
+  }
+  .setup-connect-agent {
+    animation: setup-connect-bump-agent var(--cycle) cubic-bezier(0.2, 0.8, 0.2, 1) infinite;
+  }
+  .setup-connect-agent::after {
+    animation: setup-connect-ring-agent var(--cycle) ease-out infinite;
+  }
+}
+
+/* Dot i peaks at 10% + i steps on the way out, and at 55% + (6 - i) steps on the way back. */
+@keyframes setup-connect-wave-out {
+  0%,
+  22%,
+  100% {
+    opacity: 0;
+    transform: scale(1);
+  }
+  10% {
+    opacity: 1;
+    transform: scale(1.7);
+  }
+}
+
+@keyframes setup-connect-wave-back {
+  0%,
+  43%,
+  67%,
+  100% {
+    opacity: 0;
+    transform: scale(1);
+  }
+  55% {
+    opacity: 1;
+    transform: scale(1.7);
+  }
+}
+
+/* The out-wave reaches Couchbot at about 10% + 6 × 70 ms of 3 s ≈ 24%; the back-wave reaches the
+   agent at about 55% + 14% ≈ 69%. */
+@keyframes setup-connect-bump-agentbnb {
+  0%,
+  23%,
+  38%,
+  100% {
+    transform: scale(1);
+  }
+  28% {
+    transform: scale(1.07);
+  }
+}
+
+@keyframes setup-connect-ring-agentbnb {
+  0%,
+  23% {
+    opacity: 0;
+    transform: scale(1);
+  }
+  24% {
+    opacity: 0.55;
+    transform: scale(1);
+  }
+  40%,
+  100% {
+    opacity: 0;
+    transform: scale(1.22);
+  }
+}
+
+@keyframes setup-connect-bump-agent {
+  0%,
+  68%,
+  83%,
+  100% {
+    transform: scale(1);
+  }
+  73% {
+    transform: scale(1.07);
+  }
+}
+
+@keyframes setup-connect-ring-agent {
+  0%,
+  68% {
+    opacity: 0;
+    transform: scale(1);
+  }
+  69% {
+    opacity: 0.55;
+    transform: scale(1);
+  }
+  85%,
+  100% {
+    opacity: 0;
+    transform: scale(1.22);
+  }
+}

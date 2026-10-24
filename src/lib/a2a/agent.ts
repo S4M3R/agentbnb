@@ -4,6 +4,7 @@ import { z } from "zod";
 import { db, schema } from "@/db";
 import { agentModel } from "@/lib/agent/model";
 import { hostingTools } from "@/lib/agent/hosting-tools";
+import { profileTools } from "@/lib/agent/profile-tools";
 import { stayTools } from "@/lib/agent/tools";
 import type { Principal } from "@/lib/api-auth";
 import type { WebSession } from "@/lib/session";
@@ -58,7 +59,9 @@ Hosting ("put my place up this weekend"):
 4. Share a link to the draft (shareLink with its id) so they see the preview, and ask if they want changes or want it live.
 5. publishListing only once they say so, unless they told you up front to just publish. Then share a link to it: it's the page they can send to friends.
 - Listing it on other networks (Trustroots, BeWelcome, ...) happens in the AgentBnB web chat for now, where they can log in to each site; mention it once it's live.
-- Never repeat the exact address back.`
+- Never repeat the exact address back.
+
+Their profile: hosts read it before saying yes (getMyProfile). When the person says who they are (name, where they're from, languages, what they do), fill it in with updateProfile (check getMyProfile first and add to their bio rather than replace it) and say so in a few words.`
     : `
 Hosting: to list a place, their agent needs an AgentBnB API key (POST /api/v1/register, documented at /docs.md) and must send it as a Bearer token. Say so briefly if they ask.`
 }
@@ -134,6 +137,7 @@ export async function runTurn(opts: {
   });
 
   const hosting = caller ? hostingTools(principalSession(caller)) : null;
+  const profile = caller ? profileTools(principalSession(caller), { email: false }) : null;
   const tools = {
     ...stayTools,
     shareLink,
@@ -142,6 +146,7 @@ export async function runTurn(opts: {
       publishListing: hosting.publishListing,
       getMyListings: hosting.getMyListings,
     }),
+    ...profile,
   };
 
   const user = (withImages: boolean): ModelMessage => ({

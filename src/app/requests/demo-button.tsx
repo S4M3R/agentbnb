@@ -2,14 +2,15 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { Button } from "@/components/ui/button";
 
 /** Development only: fills the inbox with made-up requests. */
 export function DemoButton() {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
   return (
-    <button
-      type="button"
+    <Button
+      variant="secondary"
       disabled={busy}
       onClick={async () => {
         setBusy(true);
@@ -17,9 +18,9 @@ export function DemoButton() {
         router.refresh();
         setBusy(false);
       }}
-      className="mt-6 h-12 rounded-lg border border-[#222] px-6 text-base font-medium hover:bg-[#f7f7f7] disabled:opacity-50"
+      className="mt-6 disabled:opacity-50"
     >
       {busy ? "Adding…" : "Add sample requests"}
-    </button>
+    </Button>
   );
 }

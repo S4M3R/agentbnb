@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { LogoMark } from "@/components/brand/logo";
+import { Couchbot, type CouchbotMood } from "@/components/brand/logo";
 import { RichText } from "./rich-text";
 
 /** The guest's turn: their text in a bubble, with any photos they attached above it. */
@@ -21,11 +21,22 @@ export function UserMessage({ children, photos = [] }: { children: ReactNode; ph
   );
 }
 
-/** The agent's turn: its mark beside a column of text and tool results. */
-export function AssistantMessage({ children }: { children: ReactNode }) {
+/**
+ * The agent's turn: Couchbot beside a column of text and tool results. `mood` is its face
+ * (thinking while it works); `live` animates it, which only the newest turn should do.
+ */
+export function AssistantMessage({
+  children,
+  mood = "idle",
+  live = false,
+}: {
+  children: ReactNode;
+  mood?: CouchbotMood;
+  live?: boolean;
+}) {
   return (
-    <div className="flex gap-3 sm:gap-4">
-      <LogoMark size={30} className="mt-0.5 hidden shrink-0 text-rausch sm:block" />
+    <div className="flex gap-2.5 sm:gap-4">
+      <Couchbot size={30} mood={mood} animated={live} className="mt-0.5 size-6 shrink-0 sm:size-[30px]" />
       <div className="flex min-w-0 flex-1 flex-col gap-3.5">{children}</div>
     </div>
   );

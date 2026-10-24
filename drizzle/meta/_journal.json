@@ -50,6 +50,13 @@
       "when": 1792873768276,
       "tag": "0006_rentals",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1792878793717,
+      "tag": "0007_keychain",
+      "breakpoints": true
     }
   ]
 }

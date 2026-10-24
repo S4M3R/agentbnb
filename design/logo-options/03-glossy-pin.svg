@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="100" height="100">
+<defs>
+  <radialGradient id="xg" cx=".36" cy=".26" r=".85"><stop offset="0" stop-color="#ff9aae"/><stop offset=".35" stop-color="#ff4467"/><stop offset=".75" stop-color="#e3164a"/><stop offset="1" stop-color="#a8063a"/></radialGradient>
+  <radialGradient id="xhl" cx=".5" cy=".5" r=".5"><stop offset="0" stop-color="#fff" stop-opacity=".9"/><stop offset="1" stop-color="#fff" stop-opacity="0"/></radialGradient>
+  <linearGradient id="xw" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff"/><stop offset="1" stop-color="#ffe0e7"/></linearGradient>
+  <linearGradient id="xdr" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ff5c7b"/><stop offset="1" stop-color="#e0154a"/></linearGradient>
+  <filter id="xb" x="-50%" y="-100%" width="200%" height="300%"><feGaussianBlur stdDeviation="2"/></filter>
+  <filter id="xb1" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="1.4"/></filter>
+  <clipPath id="xc"><path d="M50 94C46.5 94 19 65 19 41A31 31 0 1 1 81 41C81 65 53.5 94 50 94Z"/></clipPath>
+</defs>
+<ellipse cx="50" cy="95" rx="15" ry="3" fill="#000" opacity=".25" filter="url(#xb)"/>
+<path d="M50 94C46.5 94 19 65 19 41A31 31 0 1 1 81 41C81 65 53.5 94 50 94Z" fill="url(#xg)"/>
+<g clip-path="url(#xc)">
+  <path d="M50 94C46.5 94 19 65 19 41A31 31 0 1 1 81 41C81 65 53.5 94 50 94Z" transform="translate(2.5 3)" fill="none" stroke="#7a0328" stroke-opacity=".35" stroke-width="6" filter="url(#xb1)"/>
+</g>
+<ellipse cx="37" cy="21" rx="10" ry="5.5" transform="rotate(-32 37 21)" fill="url(#xhl)"/>
+<path d="M50 26.5 34.5 38.6a2.6 2.6 0 0 0-1 2.1V54a3.5 3.5 0 0 0 3.5 3.5h26a3.5 3.5 0 0 0 3.5-3.5V40.7a2.6 2.6 0 0 0-1-2.1Z" transform="translate(0 2.6)" fill="#8c0430" opacity=".55" filter="url(#xb1)"/>
+<path d="M50 26.5 34.5 38.6a2.6 2.6 0 0 0-1 2.1V54a3.5 3.5 0 0 0 3.5 3.5h26a3.5 3.5 0 0 0 3.5-3.5V40.7a2.6 2.6 0 0 0-1-2.1Z" fill="url(#xw)"/>
+<rect x="45.5" y="45" width="9" height="12.5" rx="3" fill="url(#xdr)"/></svg>
