@@ -1,26 +1,98 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
+/* Tokens from DESIGN.md (Airbnb-inspired). Light only: the system has no dark mode. */
+@theme {
+  --font-sans: var(--font-inter), system-ui, -apple-system, "Helvetica Neue", sans-serif;
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
+  --color-rausch: #ff385c;
+  --color-rausch-active: #e00b41;
+  --color-rausch-disabled: #ffd1da;
+  --color-ink: #222222;
+  --color-body: #3f3f3f;
+  --color-muted: #6a6a6a;
+  --color-hairline: #dddddd;
+  --color-hairline-soft: #ebebeb;
+  --color-border-strong: #c1c1c1;
+  --color-canvas: #ffffff;
+  --color-surface-soft: #f7f7f7;
+  --color-surface-strong: #f2f2f2;
+  --color-error: #c13515;
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+  /* Tints for chips and request status: Rausch for match reasons, green for yes, amber for "interested". */
+  --color-rausch-soft: #fff0f3;
+  --color-rausch-deep: #a30d36;
+  --color-success: #0b6b3a;
+  --color-success-soft: #e7f5ec;
+  --color-success-dot: #1da05b;
+  --color-amber: #7a4a00;
+  --color-amber-soft: #fff3dc;
+  --color-amber-dot: #d48a12;
+
+  --radius-card: 14px;
+  --shadow-float: 0 0 0 1px rgb(0 0 0 / 0.02), 0 2px 6px 0 rgb(0 0 0 / 0.04), 0 4px 8px 0 rgb(0 0 0 / 0.1);
+
+  --animate-pop: pop 0.28s cubic-bezier(0.2, 0.8, 0.2, 1);
+  @keyframes pop {
+    from {
+      transform: scale(0.96);
+      opacity: 0;
+    }
+  }
+
+  --animate-panel-in: panel-in 0.32s cubic-bezier(0.2, 0.8, 0.2, 1);
+  @keyframes panel-in {
+    from {
+      transform: translateX(24px);
+      opacity: 0;
+    }
+  }
+
+  --animate-live: live 2s ease-out infinite;
+  @keyframes live {
+    0% {
+      box-shadow: 0 0 0 0 rgb(29 160 91 / 0.45);
+    }
+    70%,
+    100% {
+      box-shadow: 0 0 0 7px rgb(29 160 91 / 0);
+    }
+  }
+
+  --animate-shimmer: shimmer 1.6s ease-in-out infinite;
+  @keyframes shimmer {
+    0%,
+    100% {
+      opacity: 0.45;
+    }
+    50% {
+      opacity: 1;
+    }
   }
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: var(--font-sans), system-ui, sans-serif;
+  background: var(--color-canvas);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+}
+
+::selection {
+  background: var(--color-rausch-disabled);
+  color: var(--color-ink);
+}
+
+/* In the base layer so a component's focus-visible utilities can override it. */
+@layer base {
+  :focus-visible {
+    outline: 2px solid var(--color-ink);
+    outline-offset: 2px;
+  }
+}
+
+/* Horizontal rails scroll by touch and arrow buttons; the bar itself stays hidden. */
+.no-scrollbar {
+  scrollbar-width: none;
+}
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
 }
