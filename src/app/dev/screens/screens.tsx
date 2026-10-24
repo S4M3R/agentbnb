@@ -2,6 +2,8 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { CalendarCard } from "@/components/calendar/calendar-card";
+import { CalendarView } from "@/components/calendar/calendar-view";
 import { Composer, ComposerTool } from "@/components/chat/composer";
 import { ChatColumn, ComposerDock, Conversation } from "@/components/chat/conversation";
 import { ActivityPill, ChatHome } from "@/components/chat/home";
@@ -19,6 +21,7 @@ import { AppShell } from "@/components/shell/app-shell";
 import { SidePanel } from "@/components/shell/side-panel";
 import { Sidebar, type SidebarNavItem } from "@/components/shell/sidebar";
 import { TopBar } from "@/components/shell/top-bar";
+import { CalendarPage } from "../../calendar/shell";
 import { ExternalMatches } from "@/components/stays/external-matches";
 import { StayLink } from "@/components/stays/stay-link";
 import { StayPanel } from "@/components/stays/stay-panel";
@@ -32,6 +35,7 @@ const NAV: SidebarNavItem[] = [
   { label: "Search chats", href: "#", icon: <SearchIcon size={18} strokeWidth={1.9} /> },
   { label: "Trips", href: screenHref("requests"), icon: <SuitcaseIcon size={18} strokeWidth={1.9} />, count: 3 },
   { label: "Hosting", href: "#", icon: <HomeIcon size={18} strokeWidth={1.9} />, alert: "1 request" },
+  { label: "Calendar", href: screenHref("calendar"), icon: <CalendarIcon size={18} strokeWidth={1.9} /> },
 ];
 
 const noop = () => {};
@@ -67,6 +71,11 @@ export function DesignScreen({ screen }: { screen: Screen }) {
     >
       {screen === "home" && <Home go={go} />}
       {(screen === "results" || screen === "stay") && <Results go={go} withListing={screen === "stay"} />}
+      {screen === "calendar" && (
+        <CalendarPage>
+          <CalendarView data={data.calendar} />
+        </CalendarPage>
+      )}
       {screen === "requests" && (
         <Requests requests={requests} arrival={arrival} onConfirm={setArrival} onUndo={() => setArrival(null)} />
       )}
@@ -287,12 +296,16 @@ function Requests({
         />
         <AssistantMessage>
           {arrival ? (
-            <StayConfirmed
-              host={requests[0].host}
-              detail={`Fri 30 Oct, arriving ${arrival}. I told João and Inês you found a place, and sent Marta your arrival time.`}
-              onMessage={noop}
-              onUndo={onUndo}
-            />
+            <>
+              <StayConfirmed
+                host={requests[0].host}
+                detail={`Fri 30 Oct, arriving ${arrival}. I told João and Inês you found a place, and sent Marta your arrival time.`}
+                onMessage={noop}
+                onUndo={onUndo}
+              />
+              <AssistantText text="Here's your trip now. Porto with Rui starts Monday, so **Sunday 1 Nov is still open**. Want me to find you a couch for that night?" />
+              <CalendarCard data={data.calendar} side="trip" />
+            </>
           ) : (
             <>
               <AssistantText text="**Marta said yes.** Confirming spends 2 of your nights, leaves you 3, and withdraws João and Inês. Lock it in?" />

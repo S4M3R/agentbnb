@@ -6,6 +6,7 @@ import { clip, highlights, loadPhotos, loadWindows, locationLabel, openWindow, t
 import { MARKETS } from "@/lib/markets";
 import type { WebSession } from "@/lib/session";
 import { applyTools } from "./apply-tools";
+import { calendarTools } from "./calendar-tools";
 import { hostingTools } from "./hosting-tools";
 
 const { listings, listingAvailability: avail, sources, externalHosts } = schema;
@@ -275,7 +276,7 @@ const getCoverage = tool({
 export const stayTools = { searchStays, getListing, getCoverage };
 
 export function createAgentTools(session: WebSession) {
-  return { ...stayTools, ...hostingTools(session), ...applyTools(session) };
+  return { ...stayTools, ...hostingTools(session), ...applyTools(session), ...calendarTools(session) };
 }
 
 export type AgentUIMessage = UIMessage<never, UIDataTypes, InferUITools<ReturnType<typeof createAgentTools>>>;
