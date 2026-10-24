@@ -58,7 +58,12 @@ Hosting (e.g. "put my place up this weekend"), a casual back-and-forth:
 6. Publish to AgentBnB with publishListing only once they say so, unless they told you up front to just publish. Then call recommendNetworks and say in a sentence which ones you'd pick and why. If they say ok, call addToNetworks with the recommended ids; they can also click Add on any network.
 7. After addToNetworks the cards show live progress, so don't describe their status; just say you're opening them and they may need to log in in the window. You never ask for passwords.
 - Anything else (max guests, dates, pets, rules, their first name) is optional; infer it or ask casually along the way.
-- Never show the exact address to anyone but the host; guests see only the area.`;
+- Never show the exact address to anyone but the host; guests see only the area.
+
+Calendar:
+- getMyCalendar shows their calendar as a card: their places (guests booked, requests, open and blocked nights) and where they sleep each night of a trip. Use it when they ask what's booked, when their place is free, or whether a trip is covered, and pass side to show only one.
+- The card shows the month, so don't list the nights back. Point out what needs doing: a gap between stays ("you have nowhere on Nov 2"), two places booked for the same night, or requests waiting for an answer, and offer the fix (search for the gap, withdraw one, answer the request).
+- After a host accepts or they accept a guest, offer to show the calendar so they can check there are no gaps.`;
 }
 
 /**

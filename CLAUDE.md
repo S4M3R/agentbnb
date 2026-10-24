@@ -138,12 +138,21 @@ It has two sides:
 - `/api/cron/applications` (`vercel.ts`; daily on Hobby) starts due checks and sends the
   "no reply in 3 days" nudges. Opening the app also re-checks (at most every 30 min).
 
+## Calendar (`/calendar`, `src/components/calendar/`, `src/lib/calendar.ts`)
+- One month view of both sides: a lane per place you host (guests booked, requests, open and
+  blocked nights, from AgentBnB and every network) and a "Where you sleep" lane for your trips
+  (confirmed stays, applications still waiting, gaps of up to 7 nights between stays, and nights
+  booked twice). A stay covers its nights, `start` up to (not including) `end`; availability ranges
+  are inclusive. All the shaping is pure (`calendar.ts`), shared by the page, the chat card
+  (`getMyCalendar`) and the dev screen (`/dev/screens/calendar`).
+
 ## Agent tools (AI SDK `tool()`s on `/api/chat`)
 - Search: `searchStays`, `getListing`, `getCoverage`.
 - Hosting: `askForLocation`, `askForPhotos` (client-side), `saveListingDraft`, `publishListing`,
   `recommendNetworks`, `addToNetworks`, `getMyListings`.
 - Applying: `getMyApplications`, `updateMyProfile`, `applyToListings`, `sendApplications`,
   `messageHost`, `withdrawApplications`, `scheduleStay`, `respondToRequest` (hosts).
+- Calendar: `getMyCalendar` (a month card in the chat; the model gets only the summary).
 
 ## A2A (agent-to-agent): Instinct and other personal agents (`src/lib/a2a/`)
 - Agent card at `/.well-known/agent-card.json` (also `/.well-known/agent.json`), JSON-RPC at `/a2a`. Speaks

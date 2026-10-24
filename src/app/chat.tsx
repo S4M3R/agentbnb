@@ -6,12 +6,13 @@ import { Fragment, useEffect, useRef, useState } from "react";
 import { AttachmentTray } from "@/components/chat/attachments";
 import { Composer } from "@/components/chat/composer";
 import { ChatColumn, ComposerDock, Conversation } from "@/components/chat/conversation";
+import { CalendarCard } from "@/components/calendar/calendar-card";
 import { ChatHome } from "@/components/chat/home";
 import { AssistantMessage, AssistantText, ToolStatus, UserMessage } from "@/components/chat/messages";
 import { StarterCards, type Starter } from "@/components/chat/starter-cards";
 import { AppShell } from "@/components/shell/app-shell";
 import { SidePanel } from "@/components/shell/side-panel";
-import { Sidebar, type SidebarNavItem } from "@/components/shell/sidebar";
+import { Sidebar } from "@/components/shell/sidebar";
 import { TopBar } from "@/components/shell/top-bar";
 import { toStayCard, toStayPanel } from "@/components/stays/adapters";
 import { TYPE_LABEL } from "@/components/stays/format";
@@ -20,11 +21,12 @@ import { StayPanel } from "@/components/stays/stay-panel";
 import { StayResults } from "@/components/stays/stay-results";
 import type { StayDetails } from "@/components/stays/types";
 import { Button, ButtonLink } from "@/components/ui/button";
-import { ExternalIcon, HomeIcon, MapIcon, NewChatIcon, SuitcaseIcon } from "@/components/ui/icons";
+import { ExternalIcon, NewChatIcon } from "@/components/ui/icons";
 import type { AgentUIMessage } from "@/lib/agent/tools";
 import { ApplicationCards } from "./application-cards";
 import { ListingPreview, NetworkPicker, PublicationCard } from "./hosting";
 import { LocationRequest } from "./location-request";
+import { navItems, useUnreadApplications } from "./nav";
 import { PhotoRequest } from "./photo-request";
 import { uploadPhoto } from "./photo-upload";
 
@@ -52,39 +54,6 @@ const STARTERS: Starter[] = [
     photo: unsplash("1500382017468-9049fed747ef"),
   },
 ];
-
-/** Sidebar links; `unread` counts application updates the guest hasn't seen. */
-function navItems(unread: number): SidebarNavItem[] {
-  return [
-    {
-      label: "My applications",
-      href: "/applications",
-      icon: <SuitcaseIcon size={18} strokeWidth={1.9} />,
-      count: unread > 0 ? Math.min(unread, 99) : undefined,
-    },
-    { label: "Host requests", href: "/requests", icon: <HomeIcon size={18} strokeWidth={1.9} /> },
-    { label: "Map of stays", href: "/map", icon: <MapIcon size={18} strokeWidth={1.9} /> },
-  ];
-}
-
-/** Unread application updates, refreshed every 30s while the tab is visible. */
-function useUnreadApplications() {
-  const [unread, setUnread] = useState(0);
-  useEffect(() => {
-    let stopped = false;
-    async function load() {
-      const res = await fetch("/api/applications").catch(() => null);
-      if (res?.ok && !stopped) setUnread((await res.json()).unread ?? 0);
-    }
-    load();
-    const timer = setInterval(() => document.visibilityState === "visible" && load(), 30_000);
-    return () => {
-      stopped = true;
-      clearInterval(timer);
-    };
-  }, []);
-  return unread;
-}
 
 type Part = AgentUIMessage["parts"][number];
 
@@ -460,6 +429,11 @@ function PartView({
       if (p.state === "output-error") return <ToolStatus failed label="Couldn't load your applications." />;
       if (p.state !== "output-available") return <ToolStatus label="Checking your applications…" />;
       return null;
+    case "tool-getMyCalendar":
+      if (p.state === "output-available")
+        return <CalendarCard data={p.output.data} month={p.output.month} side={p.output.side} />;
+      if (p.state === "output-error") return <ToolStatus failed label="Couldn't load your calendar." />;
+      return <ToolStatus label="Checking your calendar…" />;
     case "tool-getCoverage":
       if (p.state === "output-error") return <ToolStatus failed label="Couldn't check coverage." />;
       if (p.state !== "output-available") return <ToolStatus label="Checking what I can search…" />;
