@@ -288,6 +288,8 @@ export async function setStatus(
     patch?: Partial<typeof applications.$inferInsert>;
     /** Skip notifications, e.g. for steps the guest just did themself. */
     quiet?: boolean;
+    /** Extra data on the status event, e.g. what a needs_user step is waiting for (`ask`). Never secrets. */
+    data?: Record<string, unknown>;
   },
 ) {
   const row = await load(id);
@@ -304,7 +306,7 @@ export async function setStatus(
       ...opts.patch,
     })
     .where(eq(applications.id, id));
-  await addEvent(id, "status", opts.actor, message, { from, to });
+  await addEvent(id, "status", opts.actor, message, { ...opts.data, from, to });
   if (row.app.channel === "internal") await mirrorToHostInbox(id, to, opts.actor);
 
   if (opts.quiet) return;

@@ -3,11 +3,14 @@ import { and, asc, eq, inArray, isNull, lt, lte, or, sql } from "drizzle-orm";
 import { z } from "zod";
 import { db, schema } from "@/db";
 import { addEvent, recordHostMessage, setStatus } from "@/lib/applications";
+import type { NeedsUserAsk } from "@/lib/access";
 import { BrowserAgentError, markConnected, runBrowserTask, type AskResult } from "@/lib/browser-agent";
+import { accessRules, confirmAgentLogin } from "@/lib/browser-access";
 
 // The browser agent applying on external sites for the guest. One run does whatever an
 // application needs right now:
-//   - submit it (status queued), handing the browser to the guest to log in if needed;
+//   - submit it (status queued). It tries as-is first and only deals with logging in when the site
+//     asks: the guest's Keychain login, a new account if they allow it, or asking them (browser-access.ts);
 //   - send replies the guest wrote in AgentBnB (message events with delivery "pending");
 //   - check the site for news: host messages, accepted / declined.
 // Runs start from POST /api/applications/run (a person's click, or the cron fanning out), never
@@ -38,6 +41,7 @@ const Finish = z.object({
     .describe("Every message from the host in the conversation, oldest first, verbatim. Repeat old ones too; we skip duplicates."),
   deliveredMessageIds: z.array(z.string()).describe("Ids of the guest's pending messages you sent in this run."),
   externalRef: z.string().optional().describe("URL of the application or the conversation with the host."),
+  loggedIn: z.boolean().describe("True if the site shows the guest logged in to an account on it right now."),
   summary: z.string().describe('One sentence for the guest, e.g. "Applied on Workaway; Maria usually replies within 2 days."'),
 });
 
@@ -153,9 +157,14 @@ async function run(
   const id = app.id;
   const site = row.sourceName;
 
-  async function askUser(message: string, deadline: number): Promise<AskResult> {
+  /** A login or email we're still waiting for; kept if the run times out, so the form stays up. */
+  let waitingFor: NeedsUserAsk | undefined;
+
+  async function askUser(message: string, deadline: number, ask: NeedsUserAsk): Promise<AskResult> {
     const asked = new Date();
-    await setStatus(id, "needs_user", { actor: "agent", message });
+    waitingFor = ask.kind === "browser" ? undefined : ask;
+    // `ask` tells the application page which form to show (their login, their email, or the browser).
+    await setStatus(id, "needs_user", { actor: "agent", message, data: { ask } });
     while (Date.now() < deadline) {
       await new Promise((r) => setTimeout(r, POLL_MS));
       const [a] = await db
@@ -164,7 +173,10 @@ async function run(
         .where(eq(applications.id, id));
       if (!a || a.status === "cancelled" || a.status === "failed") return "stopped";
       if (a.status === "sent") return "user_finished"; // they tapped "I applied myself"
-      if (a.userActedAt && a.userActedAt >= asked) return "continue";
+      if (a.userActedAt && a.userActedAt >= asked) {
+        waitingFor = undefined;
+        return "continue";
+      }
     }
     return "timeout";
   }
@@ -173,6 +185,7 @@ async function run(
     userId: app.userId,
     sourceId: row.listing.sourceId,
     startUrl: app.externalRef ?? row.listing.url!,
+    siteName: site,
     instructions: instructions(row, { submit, outbox, interactive }),
     prompt: submit
       ? `The browser is open at the listing. Apply to it.`
@@ -216,7 +229,12 @@ async function run(
       if (submit)
         await setStatus(id, "needs_user", {
           actor: "agent",
-          message: "I ran out of time in this browser. Tap Continue and I'll pick up where I left off.",
+          message: waitingFor
+            ? waitingFor.kind === "credentials"
+              ? `I still need your ${site} login. Save it below and I'll pick up where I left off.`
+              : `I still need your email to create your ${site} account. Add it below and I'll carry on.`
+            : "I ran out of time in this browser. Tap Continue and I'll pick up where I left off.",
+          data: waitingFor ? { ask: waitingFor } : undefined,
         });
       break;
     case "stopped":
@@ -241,9 +259,14 @@ async function record(row: Loaded, r: Finished, { submit, outbox }: { submit: bo
       return;
     }
     await setStatus(id, "sent", { actor: "agent", message: r.summary, patch });
-    await markConnected(app.userId, row.listing.sourceId);
   } else {
     await db.update(applications).set(patch).where(eq(applications.id, id));
+  }
+
+  // The saved browser profile is signed in (the Keychain lists it), and a login the agent created works.
+  if (r.loggedIn) {
+    await markConnected(app.userId, row.listing.sourceId);
+    await confirmAgentLogin(app.userId, row.listing.sourceId);
   }
 
   const delivered = new Set(r.deliveredMessageIds);
@@ -295,15 +318,12 @@ function instructions(
 Your tasks:
 ${tasks.map((t, i) => `${i + 1}. ${t}`).join("\n")}
 
+${accessRules({ siteName: site, person: guest.name, interactive })}
+
 Rules:
-- First check whether ${guest.name} is logged in to ${site}. ${
-    interactive
-      ? "If not, use askUser to have them log in or sign up."
-      : "If not, call giveUp with \"You're logged out of " + site + "\"; don't try to log in."
-  } Never type passwords, codes or payment details yourself, and never create accounts.
-- ${interactive ? "Use askUser for" : "Call giveUp on"} CAPTCHAs, email verification, membership or payment walls, and form questions you can't answer from what's below.
+- ${interactive ? "Use askUser for" : "Call giveUp on"} form questions you can't answer from what's below.
 - Don't apply twice: if the site shows this listing was already applied to or contacted, don't submit again; report submitted: true.
-- Never accept terms, pay, or confirm a booking on ${guest.name}'s behalf; only send the application and messages.
+- Never pay, accept a paid plan or confirm a booking on ${guest.name}'s behalf; only send the application and messages (and create a free account when the access rules above allow it).
 - Keep notes short and friendly; ${guest.name} reads them.
 
 The listing: ${row.listing.title}

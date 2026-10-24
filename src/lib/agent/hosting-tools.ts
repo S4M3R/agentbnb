@@ -8,7 +8,7 @@ import {
   publishInternal,
   saveListingDraft,
 } from "@/lib/hosting/listings";
-import { recommendNetworks } from "@/lib/hosting/networks";
+import { networksForListing } from "@/lib/hosting/networks";
 import { queuePublication } from "@/lib/hosting/publications";
 import type { WebSession } from "@/lib/session";
 
@@ -111,19 +111,13 @@ export function hostingTools(session: WebSession) {
     recommendNetworks: tool({
       description:
         "External networks (Trustroots, BeWelcome, TrustedHousesitters, Workaway, ...) that fit the user's listing, " +
-        "best first, with the recommended ones marked. The user sees them with one-click Add buttons.",
+        "best first, with the recommended ones marked. The user sees them as a checklist (recommended ones ticked) " +
+        "and can publish to all the ticked ones in one click.",
       inputSchema: z.object({ listingId: z.uuid() }),
       execute: ({ listingId }) =>
         friendly(async () => {
           const listing = await getHostListing(await hostId(), listingId);
-          const published = new Map(listing.publications.map((p) => [p.network, p]));
-          return {
-            listingId,
-            networks: recommendNetworks(listing).map((n) => ({
-              ...n,
-              publication: published.get(n.id) ?? null,
-            })),
-          };
+          return { listingId, networks: networksForListing(listing) };
         }),
     }),
 
@@ -140,7 +134,9 @@ export function hostingTools(session: WebSession) {
           const userId = await hostId();
           const publications = [];
           for (const n of networks) publications.push(await queuePublication(userId, listingId, n));
-          return { publications };
+          // The chat shows the picker with these rows publishing; it starts the queued runs a few at a time.
+          const listing = await getHostListing(userId, listingId);
+          return { listingId, publications, networks: networksForListing(listing) };
         }),
     }),
 

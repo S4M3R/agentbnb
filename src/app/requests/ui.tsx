@@ -1,72 +1,22 @@
-import Link from "next/link";
-import { logoFor } from "@/lib/source-logos";
+import type { ComponentProps } from "react";
+import { Avatar as BaseAvatar } from "@/components/ui/avatar";
+import { SiteName } from "@/components/ui/site-name";
 
-// Small shared pieces for the Requests pages. Tokens follow DESIGN.md: ink #222, muted #6a6a6a,
-// hairline #ddd, Rausch #ff385c for the one primary action per screen.
+// Small shared pieces for the Requests pages. Colors are the DESIGN.md tokens from globals.css;
+// Rausch is kept for the one primary action per screen.
 
-export function TopNav({ active }: { active: "requests" | "checks" }) {
-  const tab = (href: string, label: string, on: boolean) => (
-    <Link
-      href={href}
-      className={`border-b-2 pb-1 text-[15px] font-semibold transition-colors ${
-        on ? "border-[#222] text-[#222]" : "border-transparent text-[#6a6a6a] hover:text-[#222]"
-      }`}
-    >
-      {label}
-    </Link>
-  );
-  return (
-    <header className="border-b border-[#ebebeb] bg-white">
-      <div className="mx-auto flex h-16 max-w-6xl items-center justify-between gap-6 px-5">
-        <Link href="/" className="text-lg font-bold tracking-tight text-[#ff385c]">
-          agentbnb
-        </Link>
-        <nav className="flex items-center gap-6">
-          {tab("/applications", "Applications", false)}
-          {tab("/requests", "Requests", active === "requests")}
-          {tab("/me/checks", "About you", active === "checks")}
-        </nav>
-        <Link href="/" className="text-sm font-medium text-[#222] hover:underline">
-          Chat
-        </Link>
-      </div>
-    </header>
-  );
-}
-
+/** A request's or listing's source: its favicon and name, in muted meta text. */
 export function SourceBadge({ id, name }: { id: string; name: string }) {
-  const logo = logoFor(id);
   return (
-    <span className="inline-flex items-center gap-1.5 text-[13px] text-[#6a6a6a]">
-      {id === "internal" ? (
-        <span className="grid size-4 place-items-center rounded-full bg-[#ff385c] text-[9px] font-bold text-white">a</span>
-      ) : logo ? (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img src={logo} alt="" className="size-4 rounded-sm object-contain" />
-      ) : null}
+    <SiteName site={id} className="text-[13px] text-muted">
       {name}
-    </span>
+    </SiteName>
   );
 }
 
-export function Avatar({ name, src, size = 48 }: { name: string; src?: string | null; size?: number }) {
-  const initials = name
-    .split(/\s+/)
-    .map((p) => p[0])
-    .slice(0, 2)
-    .join("")
-    .toUpperCase();
-  return src ? (
-    // eslint-disable-next-line @next/next/no-img-element
-    <img src={src} alt="" width={size} height={size} className="shrink-0 rounded-full object-cover" style={{ width: size, height: size }} />
-  ) : (
-    <span
-      className="grid shrink-0 place-items-center rounded-full bg-[#222] font-semibold text-white"
-      style={{ width: size, height: size, fontSize: size * 0.36 }}
-    >
-      {initials}
-    </span>
-  );
+/** The shared avatar at the request pages' default 48px. */
+export function Avatar(props: ComponentProps<typeof BaseAvatar>) {
+  return <BaseAvatar size={48} {...props} />;
 }
 
 const fmt = new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", timeZone: "UTC" });
@@ -93,9 +43,9 @@ export function timeAgo(date: Date | string) {
 }
 
 export const VERDICTS = {
-  consistent: { label: "Looks consistent", dot: "bg-emerald-600", text: "text-emerald-700" },
-  some_gaps: { label: "Some gaps", dot: "bg-amber-500", text: "text-amber-700" },
-  red_flags: { label: "Red flags", dot: "bg-[#c13515]", text: "text-[#c13515]" },
+  consistent: { label: "Looks consistent", dot: "bg-success-dot", text: "text-success" },
+  some_gaps: { label: "Some gaps", dot: "bg-amber-dot", text: "text-amber" },
+  red_flags: { label: "Red flags", dot: "bg-error", text: "text-error" },
 } as const;
 
 export const STATUS_LABELS: Record<string, string> = {

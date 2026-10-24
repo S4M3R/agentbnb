@@ -36,6 +36,8 @@ export const sourceKind = pgEnum("source_kind", [
   "work_exchange",
   "farm_stay",
   "home_swap",
+  "rental", // paid rooms / sublets / coliving
+  "hostel",
 ]);
 
 /** How we get data out of a source. */
@@ -57,6 +59,9 @@ export const listingType = pgEnum("listing_type", [
 ]);
 
 export const priceModel = pgEnum("price_model", ["free", "exchange", "paid"]);
+
+/** What `price_amount_cents` is per, for paid listings. */
+export const pricePeriod = pgEnum("price_period", ["night", "week", "month", "stay"]);
 
 /** `draft`: an internal listing the host hasn't published yet; hidden from search. */
 export const listingStatus = pgEnum("listing_status", ["draft", "active", "paused", "gone"]);
@@ -241,7 +246,7 @@ export const listings = pgTable(
     lat: doublePrecision("lat"),
     lng: doublePrecision("lng"),
     locationPrecision: locationPrecision("location_precision"),
-    address: text("address"), // internal listings only, never scraped
+    address: text("address"), // internal listings and businesses (hostels); never private homes
 
     // Stay details
     maxGuests: integer("max_guests"),
@@ -249,6 +254,7 @@ export const listings = pgTable(
     maxNights: integer("max_nights"),
     priceModel: priceModel("price_model").notNull().default("free"),
     priceAmountCents: integer("price_amount_cents"),
+    pricePeriod: pricePeriod("price_period"),
     currency: text("currency"),
     amenities: text("amenities").array().notNull().default(sql`'{}'::text[]`),
     languages: text("languages").array().notNull().default(sql`'{}'::text[]`),
@@ -390,6 +396,55 @@ export const userSourceAccounts = pgTable(
   },
   (t) => [uniqueIndex("user_source_accounts_user_source_idx").on(t.userId, t.sourceId)],
 );
+
+// ---------------------------------------------------------------------------
+// Keychain: the person's logins on other sites, so the browser agent can sign in for them
+// ---------------------------------------------------------------------------
+
+/** Who put a login in the Keychain: the person, or their agent when it created the account. */
+export const keychainCreatedBy = pgEnum("keychain_created_by", ["person", "agent"]);
+
+/** `unverified`: the agent created the account and hasn't signed in with it yet. `failed`: the site rejected it. */
+export const keychainStatus = pgEnum("keychain_status", ["active", "unverified", "failed"]);
+
+/**
+ * One login per person per site. `site` is the source id for marketplaces ("workaway") or the bare
+ * domain for any other website ("example.com"); a browser-session row in user_source_accounts for
+ * the same (user_id, source_id) is the same account. The password is only stored encrypted
+ * (AES-256-GCM, KEYCHAIN_KEY; see src/lib/keychain.ts) and never reaches the AI model.
+ */
+export const keychainEntries = pgTable(
+  "keychain_entries",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    site: text("site").notNull(),
+    sourceId: text("source_id").references(() => sources.id, { onDelete: "set null" }),
+    domain: text("domain"),
+    /** Email or username. Not secret: shown on the Keychain page. */
+    login: text("login").notNull(),
+    /** `v1.<iv>.<tag>.<ciphertext>` (base64url), bound to user_id + site. */
+    secretCiphertext: text("secret_ciphertext").notNull(),
+    createdBy: keychainCreatedBy("created_by").notNull().default("person"),
+    status: keychainStatus("status").notNull().default("active"),
+    notes: text("notes"),
+    lastUsedAt: timestamp("last_used_at", { withTimezone: true }),
+    ...timestamps,
+  },
+  (t) => [uniqueIndex("keychain_entries_user_site_idx").on(t.userId, t.site)],
+);
+
+/** Per-person Keychain settings. No row means the defaults. */
+export const keychainSettings = pgTable("keychain_settings", {
+  userId: uuid("user_id")
+    .primaryKey()
+    .references(() => users.id, { onDelete: "cascade" }),
+  /** "Let my agent create accounts for me when a site needs one." On by default. */
+  allowSignUp: boolean("allow_sign_up").notNull().default(true),
+  updatedAt: timestamps.updatedAt,
+});
 
 export const applications = pgTable(
   "applications",

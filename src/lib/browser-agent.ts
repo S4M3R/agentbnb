@@ -4,15 +4,19 @@ import { generateText, hasToolCall, isStepCount, tool } from "ai";
 import { and, eq } from "drizzle-orm";
 import { z } from "zod";
 import { db, schema } from "@/db";
+import type { NeedsUserAsk } from "@/lib/access";
 import { agentModel } from "@/lib/agent/model";
+import { accessTools } from "@/lib/browser-access";
 
 // A browser agent that does one task on an external site as one of our users: an AI SDK tool
 // loop driving Stagehand in a Browserbase session the user can watch live and take over.
 //
 // The session runs on the user's saved browser context for that site (stored as
 // user_source_accounts.credential_ref), so they log in once and stay logged in across runs.
-// Anything only the person should do (log in, CAPTCHA, pay) goes through `askUser`, which waits
-// until they tap Continue. Import this only from routes that trace Stagehand's assets (see
+// Logins only happen when the site asks for one, through the access tools (browser-access.ts):
+// the person's Keychain login, a new account if they allow it, or asking them for their login.
+// The model never sees a password. Anything only the person can do (CAPTCHA, 2FA, pay) goes
+// through `askUser`, which waits until they tap Continue. Import this only from routes that trace Stagehand's assets (see
 // next.config.ts): Stagehand loads its browser extension from disk.
 
 const { userSourceAccounts } = schema;
@@ -35,8 +39,10 @@ export type BrowserTask<F extends z.ZodType> = {
   /** System prompt: the job, the rules, what we know. */
   instructions: string;
   prompt: string;
-  /** Long text the agent can type with %name% instead of repeating it in tool calls. */
+  /** Long text the agent can type with %name% instead of repeating it in tool calls. Never secrets. */
   variables?: Record<string, string>;
+  /** The site's name, for the access tools. */
+  siteName: string;
   /** The tool that ends the run successfully; its input becomes `result`. */
   finish: { description: string; inputSchema: F };
   budgetMs: number;
@@ -45,8 +51,11 @@ export type BrowserTask<F extends z.ZodType> = {
   onLive(sessionId: string, liveViewUrl: string): Promise<void>;
   /** A progress note for the user. Return false if they stopped the run. */
   onNote(note: string): Promise<boolean>;
-  /** Hand the browser to the user and wait for them. Omit for unattended runs (no one is watching). */
-  askUser?: (message: string, deadline: number) => Promise<AskResult>;
+  /**
+   * Hand the browser to the user and wait for them. `ask` says what for (their login, their email,
+   * or something in the browser). Omit for unattended runs (no one is watching).
+   */
+  askUser?: (message: string, deadline: number, ask: NeedsUserAsk) => Promise<AskResult>;
   /** Always called at the end, whatever happened. */
   onClose(): Promise<void>;
 };
@@ -142,6 +151,14 @@ async function drive<F extends z.ZodType>(
   const note = z.string().describe('What you\'re doing, shown to the user, e.g. "Filling in your message".');
   const vars = Object.keys(task.variables ?? {});
 
+  /** Hand the browser to the person; ends the run unless they come back with Continue. */
+  async function ask(message: string, what: NeedsUserAsk): Promise<"continue" | "stop"> {
+    const answer = await task.askUser!(message, deadline, what);
+    if (answer === "continue") return "continue";
+    end(answer === "timeout" ? { kind: "out_of_time" } : { kind: answer });
+    return "stop";
+  }
+
   const tools = {
     goto: tool({
       description: "Open a URL in the browser.",
@@ -155,7 +172,8 @@ async function drive<F extends z.ZodType>(
     }),
     act: tool({
       description:
-        'Do one thing on the page, described in plain words: "click the Apply button", "type %intro% into the message box".' +
+        'Do one thing on the page, described in plain words: "click the Apply button", "type %intro% into the message box". ' +
+        "Never use it to type passwords or codes; logIn and signUp do that." +
         (vars.length ? ` Available variables: ${vars.map((v) => `%${v}%`).join(", ")}.` : ""),
       inputSchema: z.object({ instruction: z.string(), note }),
       execute: async ({ instruction, note }) => {
@@ -179,22 +197,29 @@ async function drive<F extends z.ZodType>(
     ...(task.askUser && {
       askUser: tool({
         description:
-          "Hand the browser to the user for something only they should do: log in, sign up, verify email, solve a " +
-          "CAPTCHA, accept terms, pay, or answer something you don't know. They see the live browser. " +
-          "Returns once they tap Continue.",
+          "Hand the browser to the user for something only they can do: solve a CAPTCHA, enter a 2FA or one-time code, " +
+          "click an email verification link, decide on a paid membership, or answer something you don't know. They see " +
+          "the live browser. Returns once they tap Continue. For logins use logIn, signUp or askForLogin instead.",
         inputSchema: z.object({
-          message: z.string().describe('Short and specific, e.g. "Log in to Workaway in the window, then tap Continue."'),
+          message: z.string().describe('Short and specific, e.g. "Solve the CAPTCHA in the window, then tap Continue."'),
         }),
         execute: async ({ message }) => {
-          const answer = await task.askUser!(message, deadline);
-          if (answer === "continue") {
+          if ((await ask(message, { kind: "browser" })) === "continue") {
             const page = await currentPage();
             return { userSays: "Done, continue.", url: await page.url() };
           }
-          end(answer === "timeout" ? { kind: "out_of_time" } : { kind: answer });
           return { userSays: "Stop." };
         },
       }),
+    }),
+    ...accessTools({
+      userId: task.userId,
+      sourceId: task.sourceId,
+      siteName: task.siteName,
+      stagehand,
+      step,
+      ask: task.askUser && ask,
+      onSignedIn: () => markConnected(task.userId, task.sourceId),
     }),
     finish: tool({
       description: task.finish.description,

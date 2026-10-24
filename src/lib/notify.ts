@@ -2,6 +2,7 @@ import { eq, inArray } from "drizzle-orm";
 import webpush from "web-push";
 import { db, schema } from "@/db";
 import { sendEmail } from "@/lib/email";
+import { SITE_URL } from "@/lib/site";
 
 // Keeping people in the loop. Every notification lands in the in-app inbox (the Applications
 // tab), and is also pushed to each browser the person enabled notifications on and emailed when
@@ -29,12 +30,7 @@ function vapid() {
 }
 
 export function appUrl(path = "/") {
-  const base =
-    process.env.APP_URL ??
-    (process.env.VERCEL_PROJECT_PRODUCTION_URL
-      ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`
-      : "http://localhost:3000");
-  return new URL(path, base).toString();
+  return new URL(path, SITE_URL).toString();
 }
 
 /** Record a notification and deliver it everywhere the person can be reached. */

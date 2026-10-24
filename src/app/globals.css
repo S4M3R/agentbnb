@@ -3,6 +3,8 @@
 /* Tokens from DESIGN.md (Airbnb-inspired). Light only: the system has no dark mode. */
 @theme {
   --font-sans: var(--font-inter), system-ui, -apple-system, "Helvetica Neue", sans-serif;
+  /* The wordmark and Couchbot's big lines only; the interface stays in Inter. */
+  --font-brand: var(--font-bricolage), var(--font-inter), system-ui, sans-serif;
 
   --color-rausch: #ff385c;
   --color-rausch-active: #e00b41;
@@ -30,6 +32,40 @@
 
   --radius-card: 14px;
   --shadow-float: 0 0 0 1px rgb(0 0 0 / 0.02), 0 2px 6px 0 rgb(0 0 0 / 0.04), 0 4px 8px 0 rgb(0 0 0 / 0.1);
+
+  /* DESIGN.md's mobile/tablet split: below 744px the header tabs move to a bottom tab bar. */
+  --breakpoint-nav: 46.5rem;
+
+  /* A damped spring (about 15% overshoot, settles in the duration), for the header's 3D icons. */
+  --ease-spring: linear(
+    0, 0.044, 0.156, 0.307, 0.473, 0.638, 0.786, 0.912, 1.009, 1.079, 1.123, 1.144, 1.147, 1.137, 1.119, 1.095,
+    1.071, 1.047, 1.026, 1.008, 0.995, 0.986, 0.981, 0.978, 0.979, 0.98, 0.983, 0.987, 0.991, 0.994, 0.997, 0.999, 1
+  );
+
+  /* A tab's icon when the tab becomes active: it dips, springs past full size and settles. */
+  --animate-tab-pop: tab-pop 0.6s var(--ease-spring);
+  @keyframes tab-pop {
+    from {
+      transform: scale(0.72) translateY(4px);
+    }
+  }
+
+  /* The active tab's underline grows out from the center. */
+  --animate-underline-in: underline-in 0.45s var(--ease-spring);
+  @keyframes underline-in {
+    from {
+      transform: scaleX(0);
+    }
+  }
+
+  /* The account menu drops in from just under the pill. */
+  --animate-menu-in: menu-in 0.18s cubic-bezier(0.2, 0.8, 0.2, 1);
+  @keyframes menu-in {
+    from {
+      transform: translateY(-6px) scale(0.98);
+      opacity: 0;
+    }
+  }
 
   --animate-pop: pop 0.28s cubic-bezier(0.2, 0.8, 0.2, 1);
   @keyframes pop {
@@ -68,6 +104,104 @@
       opacity: 1;
     }
   }
+
+  /* Searching: the network being checked pulses, gets a tick when done, and the status line
+     fades to each new name. Results rise into the rail one after another (see StayResults). */
+  --animate-network-check: network-check 0.9s ease-in-out infinite;
+  @keyframes network-check {
+    0%,
+    100% {
+      transform: scale(1);
+      box-shadow: 0 0 0 0 rgb(255 56 92 / 0.35);
+    }
+    50% {
+      transform: scale(1.1);
+      box-shadow: 0 0 0 5px rgb(255 56 92 / 0);
+    }
+  }
+
+  --animate-tick-in: tick-in 0.4s var(--ease-spring);
+  @keyframes tick-in {
+    from {
+      transform: scale(0);
+    }
+  }
+
+  --animate-fade-in: fade-in 0.3s ease-out;
+  @keyframes fade-in {
+    from {
+      opacity: 0;
+      transform: translateY(2px);
+    }
+  }
+
+  --animate-rise: rise 0.5s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  @keyframes rise {
+    from {
+      opacity: 0;
+      transform: translateY(12px) scale(0.98);
+    }
+  }
+
+  --animate-sweep: sweep 1.4s ease-in-out infinite;
+  @keyframes sweep {
+    from {
+      background-position: 100% 0;
+    }
+    to {
+      background-position: -100% 0;
+    }
+  }
+
+  /* Couchbot, the agent: blinks now and then while idle, looks around while it works, and bobs
+     gently when it's the centre of the screen (its shadow shrinks as it rises). */
+  --animate-couchbot-blink: couchbot-blink 5s ease-in-out infinite;
+  @keyframes couchbot-blink {
+    0%,
+    92%,
+    100% {
+      transform: scaleY(1);
+    }
+    95% {
+      transform: scaleY(0.1);
+    }
+  }
+
+  --animate-couchbot-look: couchbot-look 1.8s ease-in-out infinite;
+  @keyframes couchbot-look {
+    0%,
+    100% {
+      transform: translateX(-2.5px);
+    }
+    45%,
+    55% {
+      transform: translateX(2.5px);
+    }
+  }
+
+  --animate-couchbot-bob: couchbot-bob 2.8s ease-in-out infinite;
+  @keyframes couchbot-bob {
+    0%,
+    100% {
+      transform: translateY(0);
+    }
+    50% {
+      transform: translateY(-3px);
+    }
+  }
+
+  --animate-couchbot-shadow: couchbot-shadow 2.8s ease-in-out infinite;
+  @keyframes couchbot-shadow {
+    0%,
+    100% {
+      transform: scaleX(1);
+      opacity: 0.2;
+    }
+    50% {
+      transform: scaleX(0.86);
+      opacity: 0.12;
+    }
+  }
 }
 
 body {
@@ -95,4 +229,15 @@ body {
 }
 .no-scrollbar::-webkit-scrollbar {
   display: none;
+}
+
+/* A placeholder block with a light sweeping across it, while content loads. */
+.skeleton {
+  background: linear-gradient(90deg, var(--color-surface-strong) 30%, #fafafa 50%, var(--color-surface-strong) 70%)
+    0 0 / 200% 100% var(--color-surface-strong);
+}
+@media (prefers-reduced-motion: no-preference) {
+  .skeleton {
+    animation: var(--animate-sweep);
+  }
 }

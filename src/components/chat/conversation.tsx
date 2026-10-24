@@ -20,7 +20,8 @@ export function Conversation({ children, endRef }: { children: ReactNode; endRef
 /** Holds the composer under the conversation, with an optional note beneath it. */
 export function ComposerDock({ children, note }: { children: ReactNode; note?: string }) {
   return (
-    <div className="shrink-0 px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-2 sm:px-8">
+    // The fade above lets the conversation dissolve into the dock instead of being cut off at a hard edge.
+    <div className="relative shrink-0 bg-canvas px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-2 sm:px-8 before:pointer-events-none before:absolute before:inset-x-0 before:bottom-full before:h-8 before:bg-linear-to-t before:from-canvas before:to-transparent">
       <div className="mx-auto w-full max-w-3xl">
         {children}
         {note && <p className="mt-2 text-center text-xs text-muted max-sm:hidden">{note}</p>}

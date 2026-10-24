@@ -1,7 +1,7 @@
-import { and, eq, inArray, isNull, sql } from "drizzle-orm";
+import { and, eq, inArray, isNotNull, isNull, or, sql } from "drizzle-orm";
 import { db, schema } from "@/db";
 import { getHostListing, HostingError } from "./listings";
-import { getNetwork } from "./networks";
+import { getNetwork, MAX_PARALLEL_RUNS } from "./networks";
 
 // Where a host's listing stands on each external network (listing_publications), and the host's
 // controls over it. The browser agent that does the work is in ./browser-agent.ts.
@@ -127,4 +127,38 @@ export async function stopPublication(userId: string, publicationId: string) {
 
 export async function getPublication(userId: string, publicationId: string) {
   return view(await owned(userId, publicationId));
+}
+
+/** The host's browser runs that are open right now, across all their listings. */
+async function openRuns(userId: string) {
+  const [row] = await db
+    .select({ n: sql<number>`count(*)::int` })
+    .from(pubs)
+    .innerJoin(listings, eq(listings.id, pubs.listingId))
+    .where(and(eq(listings.hostUserId, userId), or(eq(pubs.status, "running"), isNotNull(pubs.browserSessionId))));
+  return row?.n ?? 0;
+}
+
+/**
+ * Queue the listing on several networks at once and claim runs for as many as MAX_PARALLEL_RUNS
+ * allows (counting the host's runs already open). The caller schedules `runPublication` with
+ * `after()` for each id in `started`; the rest stay queued, and the picker starts them as runs
+ * finish.
+ */
+export async function publishToNetworks(userId: string, listingId: string, networkIds: string[]) {
+  const queued: PublicationView[] = [];
+  for (const id of new Set(networkIds)) queued.push(await queuePublication(userId, listingId, id));
+
+  let free = MAX_PARALLEL_RUNS - (await openRuns(userId));
+  const started: string[] = [];
+  const publications: PublicationView[] = [];
+  for (const q of queued) {
+    const claimed = q.status === "queued" && free > 0 ? await claimRun(userId, q.id) : null;
+    if (claimed) {
+      free--;
+      started.push(claimed.id);
+    }
+    publications.push(claimed ?? q);
+  }
+  return { publications, started };
 }

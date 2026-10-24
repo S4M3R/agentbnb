@@ -1,17 +1,17 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { Button, ButtonLink } from "@/components/ui/button";
+import { CheckIcon, ExternalIcon } from "@/components/ui/icons";
 import type { HostListing } from "@/lib/hosting/listings";
-import type { NetworkFit } from "@/lib/hosting/networks";
+import { MAX_PARALLEL_RUNS } from "@/lib/hosting/networks";
 import type { PublicationView } from "@/lib/hosting/publications";
+import { SiteIcon, SiteName } from "@/components/ui/site-name";
+import { isHeld, toPickerRows, type NetworkWithPublication } from "@/components/hosting/adapters";
+import { PublishPicker } from "@/components/hosting/publish-picker";
 
 // Host-side cards in the chat: the listing preview, the network picker, and the live browser
 // where the agent publishes to an external network (and the host takes over when asked).
-
-const primary =
-  "rounded-lg bg-[#ff385c] px-3.5 py-1.5 text-sm font-medium text-white transition-colors hover:bg-[#e00b41] disabled:bg-[#ffd1da]";
-const secondary =
-  "rounded-lg border border-zinc-300 px-3.5 py-1.5 text-sm font-medium transition-colors hover:border-zinc-500 dark:border-zinc-700";
 
 const TYPE_LABEL: Record<string, string> = {
   couch: "Couch",
@@ -40,10 +40,10 @@ export function ListingPreview({
   const [cover, ...rest] = l.photos;
   return (
     <article
-      className={`overflow-hidden rounded-xl border border-zinc-200 dark:border-zinc-800 ${stale ? "opacity-50" : ""}`}
+      className={`overflow-hidden rounded-card border border-hairline bg-canvas ${stale ? "opacity-50" : ""}`}
     >
       {cover ? (
-        <div className="grid grid-cols-4 gap-1">
+        <div className="grid grid-cols-4 gap-1 bg-canvas">
           {/* eslint-disable-next-line @next/next/no-img-element -- Blob photos */}
           <img src={cover} alt="" className={`aspect-[4/3] h-full w-full object-cover ${rest.length ? "col-span-3" : "col-span-4"}`} />
           {rest.length > 0 && (
@@ -56,34 +56,32 @@ export function ListingPreview({
           )}
         </div>
       ) : (
-        <div className="flex aspect-[4/1] items-center justify-center bg-zinc-100 text-sm text-zinc-500 dark:bg-zinc-900">
+        <div className="flex aspect-[4/1] items-center justify-center bg-surface-soft px-4 text-center text-sm text-muted">
           No photos yet. Attach a few and I&apos;ll add them.
         </div>
       )}
 
-      <div className="space-y-3 p-4 text-sm">
+      <div className="space-y-3 p-4 text-sm sm:p-5">
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
-            <div className="text-xs text-zinc-500">
+            <div className="text-[13px] text-muted">
               {TYPE_LABEL[l.type] ?? l.type}
               {l.publicLocation && ` · ${l.publicLocation}`}
             </div>
-            <h3 className="text-base font-semibold leading-snug">{l.title}</h3>
+            <h3 className="mt-0.5 text-base font-semibold leading-snug text-ink">{l.title}</h3>
           </div>
           <span
-            className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-medium ${
-              l.status === "active"
-                ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300"
-                : "bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300"
+            className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-semibold ${
+              l.status === "active" ? "bg-success-soft text-success" : "bg-surface-strong text-body"
             }`}
           >
             {STATUS_LABEL[l.status]}
           </span>
         </div>
 
-        <p className="line-clamp-6 whitespace-pre-wrap leading-relaxed text-zinc-700 dark:text-zinc-300">{l.description}</p>
+        <p className="line-clamp-6 whitespace-pre-wrap text-[15px] leading-relaxed text-body">{l.description}</p>
 
-        <div className="flex flex-wrap gap-1">
+        <div className="flex flex-wrap gap-1.5">
           {[
             l.maxGuests && `Up to ${l.maxGuests} guest${l.maxGuests === 1 ? "" : "s"}`,
             l.pets,
@@ -92,34 +90,37 @@ export function ListingPreview({
           ]
             .filter(Boolean)
             .map((chip) => (
-              <span key={String(chip)} className="rounded-md bg-zinc-100 px-1.5 py-0.5 text-xs dark:bg-zinc-800">
+              <span
+                key={String(chip)}
+                className="inline-flex h-7 items-center rounded-full border border-hairline px-2.5 text-[13px] text-ink"
+              >
                 {chip}
               </span>
             ))}
         </div>
 
         {l.address && (
-          <div className="text-xs text-zinc-500">
+          <div className="text-[13px] text-muted">
             Exact address, only shared with guests you accept: {l.address}
           </div>
         )}
 
         {l.publications.length > 0 && (
-          <div className="flex flex-wrap gap-2 text-xs text-zinc-600 dark:text-zinc-400">
+          <div className="flex flex-wrap gap-x-3 gap-y-1 text-[13px] text-muted">
             {l.publications.map((p) => (
-              <span key={p.id}>
+              <SiteName key={p.id} site={p.network} size={14}>
                 {p.networkName}: {p.status === "live" ? "live" : p.status.replace("_", " ")}
-              </span>
+              </SiteName>
             ))}
           </div>
         )}
 
         {l.status === "draft" && !stale && (
-          <div className="flex items-center gap-3 pt-1">
-            <button type="button" className={primary} onClick={() => onSend("Looks good, publish it on AgentBnB.")}>
+          <div className="flex flex-wrap items-center gap-3 border-t border-hairline-soft pt-4">
+            <Button size="sm" onClick={() => onSend("Looks good, publish it on AgentBnB.")}>
               Publish on AgentBnB
-            </button>
-            <span className="text-xs text-zinc-500">Or tell me what to change.</span>
+            </Button>
+            <span className="text-[13px] text-muted">Or tell me what to change.</span>
           </div>
         )}
       </div>
@@ -127,89 +128,125 @@ export function ListingPreview({
   );
 }
 
-type NetworkRow = NetworkFit & { publication: { id: string; status: string } | null };
+type NetworkRow = NetworkWithPublication;
+type Pub = PublicationView | { id: string; status: string };
 
-export function NetworkPicker({ listingId, networks }: { listingId: string; networks: NetworkRow[] }) {
-  const [pubs, setPubs] = useState<Record<string, PublicationView | { id: string; status: string }>>(() =>
+/**
+ * "Where else to list it": tick the networks (recommended ones start ticked), then "Publish to N
+ * sites" starts them all in one request. The server opens up to MAX_PARALLEL_RUNS browsers at
+ * once and queues the rest; this card starts each queued one as a browser frees up. Every
+ * network being published shows its PublicationCard (live browser, take control, Continue).
+ *
+ * `initialSelected` overrides the recommended picks (the addToNetworks result passes none, since
+ * the agent already queued what the host asked for). `onChange` fires after publishing starts.
+ */
+export function NetworkPicker({
+  listingId,
+  networks,
+  initialSelected,
+  framed = true,
+  onChange,
+}: {
+  listingId: string;
+  networks: NetworkRow[];
+  initialSelected?: string[];
+  framed?: boolean;
+  onChange?: () => void;
+}) {
+  const [pubs, setPubs] = useState<Record<string, Pub>>(() =>
     Object.fromEntries(networks.filter((n) => n.publication).map((n) => [n.id, n.publication!])),
   );
-  const [adding, setAdding] = useState<string[]>([]);
+  // Latest status and whether a browser is open, as each PublicationCard reports it.
+  const [live, setLive] = useState<Record<string, { status: string; session: boolean }>>({});
+  const [started, setStarted] = useState<ReadonlySet<string>>(() => new Set());
+  const [selected, setSelected] = useState<ReadonlySet<string>>(
+    () =>
+      new Set(
+        initialSelected ?? networks.filter((n) => n.recommended && !isHeld(n.publication?.status)).map((n) => n.id),
+      ),
+  );
+  const [publishing, setPublishing] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  async function add(network: string) {
-    setAdding((a) => [...a, network]);
+  const status = (id: string) => live[id]?.status ?? pubs[id]?.status;
+  const rows = toPickerRows(networks, { selected, status, started });
+  const locked = new Set(rows.filter((r) => r.locked).map((r) => r.id));
+
+  // A few browsers at a time: running ones, and ones waiting on the host with the browser open.
+  const open = rows.filter(
+    (r) => r.locked && (status(r.id) === "running" || (status(r.id) === "needs_user" && live[r.id]?.session)),
+  ).length;
+  const waiting = rows.filter((r) => r.locked && status(r.id) === "queued").map((r) => r.id);
+  const canStart = new Set(waiting.slice(0, Math.max(0, MAX_PARALLEL_RUNS - open)));
+
+  function toggle(id: string) {
+    setSelected((s) => {
+      const next = new Set(s);
+      if (!next.delete(id)) next.add(id);
+      return next;
+    });
+  }
+
+  async function publish() {
+    const ids = rows.filter((r) => r.selected).map((r) => r.id);
+    if (!ids.length) return;
+    setPublishing(true);
     setError(null);
     try {
       const res = await fetch("/api/hosting/publications", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ listingId, network }),
+        body: JSON.stringify({ listingId, networks: ids }),
       });
       const body = await res.json();
       if (!res.ok) throw new Error(body.error?.message ?? "Couldn't start.");
-      setPubs((p) => ({ ...p, [network]: body.publication }));
+      const fresh: PublicationView[] = body.publications;
+      setPubs((p) => ({ ...p, ...Object.fromEntries(fresh.map((pub) => [pub.network, pub])) }));
+      setLive((l) => Object.fromEntries(Object.entries(l).filter(([id]) => !ids.includes(id))));
+      setStarted((s) => new Set([...s, ...ids]));
+      setSelected(new Set());
+      onChange?.();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Couldn't start.");
     } finally {
-      setAdding((a) => a.filter((n) => n !== network));
+      setPublishing(false);
     }
   }
 
-  const pending = networks.filter((n) => n.recommended && !pubs[n.id]);
-
   return (
-    <div className="space-y-2 rounded-xl border border-zinc-200 p-3 dark:border-zinc-800">
-      <div className="flex items-center justify-between gap-3 px-1">
-        <div className="text-sm font-medium">Where else to list it</div>
-        {pending.length > 1 && (
-          <button
-            type="button"
-            className={primary}
-            disabled={adding.length > 0}
-            onClick={() => pending.forEach((n) => add(n.id))}
-          >
-            Add the {pending.length} I picked
-          </button>
-        )}
-      </div>
-      <ul className="divide-y divide-zinc-100 dark:divide-zinc-900">
-        {networks.map((n) => {
-          const pub = pubs[n.id];
-          return (
-            <li key={n.id} className="space-y-2 px-1 py-2.5">
-              <div className="flex items-center justify-between gap-3">
-                <div className="min-w-0 text-sm">
-                  <div className="flex items-center gap-2">
-                    <a href={n.url} target="_blank" rel="noreferrer" className="font-medium hover:underline">
-                      {n.name}
-                    </a>
-                    {n.recommended && (
-                      <span className="rounded-full bg-[#ff385c]/10 px-1.5 py-0.5 text-[11px] font-medium text-[#e00b41]">
-                        Recommended
-                      </span>
-                    )}
-                  </div>
-                  <div className="text-zinc-600 dark:text-zinc-400">{n.pitch}</div>
-                  <div className="text-xs text-zinc-500">{n.reason}</div>
-                </div>
-                {!pub && (
-                  <button
-                    type="button"
-                    className={n.recommended ? primary : secondary}
-                    disabled={adding.includes(n.id)}
-                    onClick={() => add(n.id)}
-                  >
-                    {adding.includes(n.id) ? "Adding…" : "Add"}
-                  </button>
-                )}
-              </div>
-              {pub && <PublicationCard key={pub.id} initial={pub} networkName={n.name} />}
-            </li>
-          );
-        })}
-      </ul>
-      {error && <div className="px-1 text-sm text-red-600 dark:text-red-400">{error}</div>}
-    </div>
+    <PublishPicker
+      framed={framed}
+      heading={framed ? "Where else to list it" : undefined}
+      lead={
+        framed
+          ? "Pick the sites. I fill each one in a live browser you can watch; you log in when a site asks."
+          : "I fill each one in a live browser you can watch; you log in when a site asks."
+      }
+      rows={rows}
+      onToggle={toggle}
+      onClear={() => setSelected(new Set())}
+      onPublish={publish}
+      publishing={publishing}
+      error={error}
+      footnote={`I open ${MAX_PARALLEL_RUNS} at a time.`}
+      progress={(id) => {
+        const pub = pubs[id];
+        const n = networks.find((x) => x.id === id);
+        if (!pub || !locked.has(id)) return null;
+        return (
+          <PublicationCard
+            key={pub.id}
+            initial={pub}
+            networkId={id}
+            networkName={n?.name}
+            autoStart={canStart.has(id)}
+            onUpdate={(p) =>
+              setLive((l) => ({ ...l, [id]: { status: p.status, session: p.liveViewUrl != null } }))
+            }
+          />
+        );
+      }}
+    />
   );
 }
 
@@ -218,10 +255,18 @@ const ACTIVE = new Set(["queued", "running", "needs_user"]);
 /** One network's publication: status, the live browser while it runs, and the host's controls. */
 export function PublicationCard({
   initial,
+  networkId,
   networkName,
+  autoStart = true,
+  onUpdate,
 }: {
   initial: PublicationView | { id: string; status: string };
+  networkId?: string;
   networkName?: string;
+  /** Start a queued run when it shows up. The picker holds it back until a browser is free. */
+  autoStart?: boolean;
+  /** Every status the card learns, so the picker knows how many browsers are open. */
+  onUpdate?: (p: PublicationView) => void;
 }) {
   const [pub, setPub] = useState<PublicationView | null>("networkName" in initial ? initial : null);
   const [status, setStatus] = useState(initial.status);
@@ -230,9 +275,16 @@ export function PublicationCard({
   const started = useRef(false);
   const id = initial.id;
 
+  // The polling effect below outlives renders; it reports through the latest onUpdate.
+  const report = useRef(onUpdate);
+  useEffect(() => {
+    report.current = onUpdate;
+  });
+
   function apply(p: PublicationView) {
     setPub(p);
     setStatus(p.status);
+    report.current?.(p);
   }
 
   async function send(action: "start" | "continue" | "done" | "stop") {
@@ -250,14 +302,14 @@ export function PublicationCard({
     }
   }
 
-  // Queued from the chat (addToNetworks): start it once this card shows up.
+  // Queued (by addToNetworks, or waiting for a free browser): start it once it's allowed to.
   useEffect(() => {
-    if (status === "queued" && !started.current) {
+    if (status === "queued" && autoStart && !started.current) {
       started.current = true;
       send("start");
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- start once
-  }, [status]);
+  }, [status, autoStart]);
 
   const polling = !pub || ACTIVE.has(status);
   useEffect(() => {
@@ -281,35 +333,49 @@ export function PublicationCard({
   const name = pub?.networkName ?? networkName ?? "the site";
 
   return (
-    <div className="space-y-2 rounded-lg bg-zinc-50 p-3 text-sm dark:bg-zinc-900">
+    <div className="space-y-3 rounded-xl bg-surface-soft p-3 text-sm">
       {status === "live" ? (
         <div className="flex items-center justify-between gap-3">
-          <span className="font-medium text-emerald-700 dark:text-emerald-400">✓ Live on {name}</span>
+          <span className="flex items-center gap-1.5 font-semibold text-success">
+            <CheckIcon size={15} strokeWidth={2.6} />
+            Live on <SiteIcon site={pub?.network ?? networkId} />
+            {name}
+          </span>
           {pub?.externalUrl && (
-            <a href={pub.externalUrl} target="_blank" rel="noreferrer" className="text-xs underline underline-offset-2">
-              View ↗
-            </a>
+            <ButtonLink href={pub.externalUrl} variant="ghost" size="sm" className="-my-1 h-8 px-2.5">
+              View
+              <ExternalIcon size={14} />
+            </ButtonLink>
           )}
         </div>
       ) : status === "failed" ? (
         <div className="flex items-center justify-between gap-3">
-          <span className="text-red-600 dark:text-red-400">{pub?.error ?? "That didn't work."}</span>
-          <button type="button" className={secondary} disabled={busy} onClick={() => send("start")}>
+          <span className="text-error">{pub?.error ?? "That didn't work."}</span>
+          <Button size="sm" variant="secondary" disabled={busy} onClick={() => send("start")}>
             Retry
-          </button>
+          </Button>
         </div>
       ) : status === "needs_user" ? (
-        <div className="rounded-md border border-amber-300 bg-amber-50 p-2.5 text-amber-900 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-200">
-          <div className="font-medium">Your turn</div>
+        <div className="rounded-lg bg-amber-soft p-3 text-amber">
+          <div className="flex items-center gap-2 font-semibold">
+            <span className="size-2 rounded-full bg-amber-dot" />
+            Your turn
+          </div>
           <div>{pub?.statusMessage ?? `I need you for a moment on ${name}.`}</div>
         </div>
       ) : (
         <div className="flex items-center justify-between gap-3">
-          <span className="animate-pulse text-zinc-600 dark:text-zinc-400">
-            {pub?.statusMessage ?? `Starting ${name}…`}
+          <span className="animate-shimmer text-body">
+            {status === "queued" && !autoStart
+              ? `Waiting for a free browser to open ${name}…`
+              : (pub?.statusMessage ?? `Starting ${name}…`)}
           </span>
           {status === "running" && (
-            <button type="button" className="text-xs text-zinc-500 hover:text-foreground" onClick={() => send("stop")}>
+            <button
+              type="button"
+              className="text-[13px] font-medium text-muted underline-offset-2 hover:text-ink hover:underline"
+              onClick={() => send("stop")}
+            >
               Stop
             </button>
           )}
@@ -317,7 +383,7 @@ export function PublicationCard({
       )}
 
       {pub?.liveViewUrl && (
-        <div className="relative aspect-[16/10] overflow-hidden rounded-md border border-zinc-200 bg-white dark:border-zinc-800">
+        <div className="relative aspect-[16/10] overflow-hidden rounded-lg border border-hairline bg-canvas">
           <iframe
             src={pub.liveViewUrl}
             title={`Live browser on ${name}`}
@@ -330,7 +396,7 @@ export function PublicationCard({
               <button
                 type="button"
                 onClick={() => setControl(true)}
-                className="rounded-full bg-black/75 px-3 py-1.5 text-xs font-medium text-white backdrop-blur hover:bg-black"
+                className="rounded-full bg-ink/85 px-3.5 py-2 text-[13px] font-semibold text-white shadow-float backdrop-blur transition-colors hover:bg-ink"
               >
                 Take control
               </button>
@@ -341,13 +407,13 @@ export function PublicationCard({
 
       {status === "needs_user" && (
         <div className="flex flex-wrap items-center gap-2">
-          <button type="button" className={primary} disabled={busy} onClick={() => send("continue")}>
+          <Button size="sm" disabled={busy} onClick={() => send("continue")}>
             Continue
-          </button>
+          </Button>
           {pub?.liveViewUrl && (
-            <button type="button" className={secondary} disabled={busy} onClick={() => send("done")}>
+            <Button size="sm" variant="secondary" disabled={busy} onClick={() => send("done")}>
               I finished it myself
-            </button>
+            </Button>
           )}
         </div>
       )}

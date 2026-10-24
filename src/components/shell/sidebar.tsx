@@ -1,8 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import type { ReactNode } from "react";
-import { LogoMark } from "@/components/brand/logo";
+import { usePathname } from "next/navigation";
+import { Suspense, type ReactNode } from "react";
+import { LogoMark, Wordmark } from "@/components/brand/logo";
 import { NightsCard, type NightsSummary } from "@/components/nights/nights";
 import { STATUS, StatusPill } from "@/components/requests/status";
 import type { StayRequest } from "@/components/requests/types";
@@ -54,7 +55,7 @@ export function Sidebar({
       <div className="flex items-center justify-between pb-2 pl-4 pr-2.5 pt-3.5">
         <Link href="/" onClick={close} aria-label="AgentBnB home" className="flex items-center gap-1.5 rounded-lg text-rausch">
           <LogoMark size={28} />
-          <span className="text-[21px] font-extrabold tracking-[-0.045em]">agentbnb</span>
+          <Wordmark className="text-[22px]" />
         </Link>
         <SidebarClose />
       </div>
@@ -71,28 +72,10 @@ export function Sidebar({
           <NewChatIcon size={18} strokeWidth={1.9} />
           New chat
         </button>
-        {nav.map((item) => (
-          <Link
-            key={item.label}
-            href={item.href}
-            onClick={close}
-            className="flex h-10 items-center gap-2.5 rounded-[10px] px-3 transition-colors hover:bg-hairline-soft"
-          >
-            {item.icon}
-            <span className="flex-1">{item.label}</span>
-            {item.count != null && (
-              <span className="min-w-[22px] rounded-full bg-ink px-[7px] text-center text-xs font-bold leading-[22px] text-white tabular-nums">
-                {item.count}
-              </span>
-            )}
-            {item.alert && (
-              <span className="flex items-center gap-1.5 text-xs font-semibold text-rausch-deep">
-                <span className="size-[7px] rounded-full bg-rausch" />
-                {item.alert}
-              </span>
-            )}
-          </Link>
-        ))}
+        {/* The current path is request data; the links render unhighlighted until it's known. */}
+        <Suspense fallback={<NavLinks nav={nav} onNavigate={close} />}>
+          <ActiveNavLinks nav={nav} onNavigate={close} />
+        </Suspense>
       </nav>
 
       <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-2.5 pb-3 pt-1">
@@ -191,4 +174,37 @@ function UserRow({ user, onNavigate }: { user: SidebarUser; onNavigate: () => vo
       <ChevronsUpDownIcon size={16} className="shrink-0 text-muted" />
     </Link>
   );
+}
+
+function ActiveNavLinks(props: { nav: SidebarNavItem[]; onNavigate: () => void }) {
+  return <NavLinks {...props} pathname={usePathname()} />;
+}
+
+function NavLinks({ nav, onNavigate, pathname }: { nav: SidebarNavItem[]; onNavigate: () => void; pathname?: string }) {
+  return nav.map((item) => {
+    const active = pathname != null && (pathname === item.href || pathname.startsWith(`${item.href}/`));
+    return (
+      <Link
+        key={item.label}
+        href={item.href}
+        onClick={onNavigate}
+        aria-current={active ? "page" : undefined}
+        className={`flex h-10 items-center gap-2.5 rounded-[10px] px-3 transition-colors ${active ? "bg-hairline-soft font-semibold" : "hover:bg-hairline-soft"}`}
+      >
+        {item.icon}
+        <span className="flex-1">{item.label}</span>
+        {item.count != null && (
+          <span className="min-w-[22px] rounded-full bg-ink px-[7px] text-center text-xs font-bold leading-[22px] text-white tabular-nums">
+            {item.count}
+          </span>
+        )}
+        {item.alert && (
+          <span className="flex items-center gap-1.5 text-xs font-semibold text-rausch-deep">
+            <span className="size-[7px] rounded-full bg-rausch" />
+            {item.alert}
+          </span>
+        )}
+      </Link>
+    );
+  });
 }

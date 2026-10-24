@@ -1,4 +1,9 @@
+import { Fragment } from "react";
 import { AvatarStack } from "@/components/ui/avatar";
+import { SiteName } from "@/components/ui/site-name";
+
+/** A marketplace by name, or with its source id (or URL) too so its favicon shows. */
+type Source = string | { id: string; name: string };
 
 /** Matches on marketplaces we can't book through: the agent drafts the message, the guest sends it there. */
 export function ExternalMatches({
@@ -8,12 +13,11 @@ export function ExternalMatches({
   onShow,
 }: {
   count: number;
-  /** Marketplace names, e.g. ["Couchsurfing", "BeWelcome"]. */
-  sources: string[];
+  /** Marketplaces, e.g. ["Couchsurfing", "BeWelcome"] or [{ id: "couchsurfing", name: "Couchsurfing" }]. */
+  sources: Source[];
   hosts: { name: string; photo?: string | null }[];
   onShow: () => void;
 }) {
-  const names = sources.length > 1 ? `${sources.slice(0, -1).join(", ")} and ${sources.at(-1)}` : sources[0];
   return (
     <div className="flex items-center gap-3.5 rounded-2xl border border-hairline-soft px-4 py-3.5">
       <span className="shrink-0 max-sm:hidden">
@@ -21,7 +25,13 @@ export function ExternalMatches({
       </span>
       <span className="flex min-w-0 flex-1 flex-col">
         <span className="font-semibold">
-          {count} more on {names}
+          {count} more on{" "}
+          {sources.map((s, i) => (
+            <Fragment key={typeof s === "string" ? s : s.id}>
+              {i > 0 && (i === sources.length - 1 ? " and " : ", ")}
+              {typeof s === "string" ? s : <SiteName site={s.id}>{s.name}</SiteName>}
+            </Fragment>
+          ))}
         </span>
         <span className="text-sm text-muted">I&apos;ll draft each message. You send it on their site.</span>
       </span>

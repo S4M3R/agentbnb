@@ -20,12 +20,12 @@ async function shrink(file: File): Promise<Blob> {
   }
 }
 
-/** Upload a photo the host attached in the chat. Returns its public Blob URL. */
-export async function uploadPhoto(file: File) {
+/** Upload a photo the host attached in the chat (or a profile photo, under `avatars`). Returns its public Blob URL. */
+export async function uploadPhoto(file: File, folder: "hosting" | "avatars" = "hosting") {
   const body = await shrink(file);
   const base = file.name.replace(/\.[^.]+$/, "").replace(/[^\w-]+/g, "-").slice(0, 40) || "photo";
   const ext = body.type === "image/jpeg" ? "jpg" : (file.name.split(".").pop() ?? "jpg");
-  const blob = await upload(`hosting/${base}.${ext}`, body, {
+  const blob = await upload(`${folder}/${base}.${ext}`, body, {
     access: "public",
     handleUploadUrl: "/api/hosting/photos",
     contentType: body.type || file.type,

@@ -1,3 +1,5 @@
+import Image from "next/image";
+
 export type Starter = { prompt: string; title: string; photo: string };
 
 /** Photo tiles on the empty home screen; each sends its prompt. */
@@ -18,12 +20,15 @@ export function StarterCards({ starters, onPick }: { starters: Starter[]; onPick
               onClick={() => onPick(s.prompt)}
               className="group flex w-full flex-col gap-2 rounded-card text-left"
             >
-              <span className="block aspect-[4/3] w-full overflow-hidden rounded-2xl bg-surface-strong">
-                {/* eslint-disable-next-line @next/next/no-img-element -- static stock photo */}
-                <img
+              <span className="relative block aspect-[4/3] w-full overflow-hidden rounded-2xl bg-surface-strong">
+                {/* Above the fold on the home screen, so they load first; next/image picks the size. */}
+                <Image
                   src={s.photo}
                   alt=""
-                  className="size-full object-cover transition-transform duration-500 ease-out group-hover:scale-[1.04]"
+                  fill
+                  sizes="(min-width: 640px) 190px, 45vw"
+                  fetchPriority="high"
+                  className="object-cover transition-transform duration-500 ease-out group-hover:scale-[1.04]"
                 />
               </span>
               <span className="px-0.5 text-sm font-semibold leading-5 text-ink sm:text-[15px]">{s.title}</span>

@@ -28,6 +28,7 @@ function card(a: apps.ApplicationSummary) {
     statusMessage: a.statusMessage,
     title: a.listing.title,
     source: a.source.name,
+    sourceId: a.source.id,
     photo: a.photo,
     startDate: a.startDate,
     endDate: a.endDate,
@@ -81,33 +82,6 @@ export function applyTools(session: WebSession) {
       },
     }),
 
-    updateMyProfile: tool({
-      description:
-        "Save what the user told you about themself, so hosts see it and future applications can use it. " +
-        "Email is where we send updates when hosts reply.",
-      inputSchema: z.object({
-        name: z.string().trim().min(1).max(120).optional(),
-        email: z.email().optional(),
-        bio: z.string().trim().max(1000).optional().describe("A few sentences in their voice: who they are, what they do, why they travel."),
-        homeCity: z.string().trim().max(120).optional(),
-        languages: z.array(z.string()).max(10).optional(),
-      }),
-      execute: (input) =>
-        friendly(async () => {
-          const user = await session.ensureUser(input.name);
-          const { name: _name, email, ...rest } = input;
-          try {
-            await db
-              .update(schema.users)
-              .set({ ...rest, ...(email && { email: email.toLowerCase() }) })
-              .where(eq(schema.users.id, user.id));
-          } catch {
-            throw new apps.ApplicationError("INVALID_INPUT", "That email is already used by another account.");
-          }
-          return { ok: true };
-        }),
-    }),
-
     applyToListings: tool({
       description:
         "Draft applications to one or more listings from searchStays (any source). The user sees each draft as a " +
@@ -150,7 +124,7 @@ export function applyTools(session: WebSession) {
       description:
         "Send drafted applications. Only when the user explicitly approved these drafts in their last message " +
         '("send it", "yes, apply"); otherwise let them tap Send on the cards. AgentBnB hosts get it right away; ' +
-        "on external sites a browser agent applies for them and may need them to log in once.",
+        "on external sites a browser agent applies for them, signing in with their Keychain only if the site requires it.",
       inputSchema: z.object({ applicationIds: z.array(z.uuid()).min(1).max(10) }),
       execute: ({ applicationIds }) =>
         friendly(async () => {

@@ -7,6 +7,7 @@ import { MARKETS } from "@/lib/markets";
 import type { WebSession } from "@/lib/session";
 import { applyTools } from "./apply-tools";
 import { hostingTools } from "./hosting-tools";
+import { profileTools } from "./profile-tools";
 
 const { listings, listingAvailability: avail, sources, externalHosts } = schema;
 
@@ -271,11 +272,36 @@ const getCoverage = tool({
   },
 });
 
+/**
+ * Client-side tool (no execute): the chat shows a calendar to pick arrival and departure.
+ * Web chat only; agents over A2A get dates in text.
+ */
+const askForDates = tool({
+  description:
+    "Ask when they want to stay. The user sees a calendar and picks arrival and departure (or says they're " +
+    "flexible). Use this instead of asking them to type dates. For one listing, pass its open windows and " +
+    "minNights from getListing so only bookable days can be picked.",
+  inputSchema: z.object({
+    intro: z.string().max(200).describe('One friendly line, e.g. "When would you arrive and leave?"'),
+    available: z
+      .array(z.object({ start: isoDate, end: isoDate }))
+      .max(12)
+      .optional()
+      .describe("Only these date windows can be picked (a listing's dates). Omit for any future date."),
+    minNights: z.number().int().positive().optional(),
+    flexible: z.boolean().optional().describe('Show an "I\'m flexible" button, e.g. for an open search.'),
+  }),
+  outputSchema: z.object({
+    startDate: isoDate.nullable().describe("Arrival, or null if they're flexible."),
+    endDate: isoDate.nullable().describe("Departure, or null if they're flexible."),
+  }),
+});
+
 /** Finding a stay: no person needed. */
 export const stayTools = { searchStays, getListing, getCoverage };
 
 export function createAgentTools(session: WebSession) {
-  return { ...stayTools, ...hostingTools(session), ...applyTools(session) };
+  return { ...stayTools, askForDates, ...hostingTools(session), ...applyTools(session), ...profileTools(session) };
 }
 
 export type AgentUIMessage = UIMessage<never, UIDataTypes, InferUITools<ReturnType<typeof createAgentTools>>>;

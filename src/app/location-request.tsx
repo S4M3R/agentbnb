@@ -3,6 +3,8 @@
 import "maplibre-gl/dist/maplibre-gl.css";
 import type { Map as MapLibreMap, Marker } from "maplibre-gl";
 import { useEffect, useRef, useState } from "react";
+import { Button } from "@/components/ui/button";
+import { PinIcon, SearchIcon } from "@/components/ui/icons";
 
 // The askForLocation tool in the chat: share your current location or drop a pin on the map
 // (with place search). Returns the point and a short place name to the agent.
@@ -14,11 +16,6 @@ type Point = { lat: number; lng: number };
 type Place = Point & { label: string; short: string };
 export type LocationRequestInput = { intro: string };
 export type LocationRequestOutput = { point: Point; label: string; address: string; source: "gps" | "map" };
-
-const primary =
-  "rounded-lg bg-[#ff385c] px-3.5 py-2 text-sm font-medium text-white transition-colors hover:bg-[#e00b41] disabled:bg-[#ffd1da]";
-const secondary =
-  "inline-flex items-center gap-1.5 rounded-lg border border-zinc-300 px-3.5 py-2 text-sm font-medium transition-colors hover:border-zinc-500 disabled:opacity-50 dark:border-zinc-700";
 
 async function geocode(params: Record<string, string>): Promise<Place[]> {
   const res = await fetch(`/api/hosting/geocode?${new URLSearchParams(params)}`);
@@ -154,43 +151,57 @@ export function LocationRequest({
   }
 
   if (done) {
-    return <div className="text-sm text-zinc-600 dark:text-zinc-400">📍 {done.label}</div>;
+    return (
+      <div className="inline-flex items-center gap-1.5 rounded-full border border-hairline px-3 py-1.5 text-sm font-medium text-ink">
+        <PinIcon size={15} className="text-rausch" />
+        {done.label}
+      </div>
+    );
   }
 
   return (
-    <div className={`space-y-3 rounded-xl border border-zinc-200 p-4 dark:border-zinc-800 ${disabled ? "opacity-50" : ""}`}>
-      <p className="text-sm">{input.intro}</p>
+    <div className={`space-y-4 rounded-card border border-hairline bg-canvas p-4 sm:p-5 ${disabled ? "opacity-50" : ""}`}>
+      <p className="text-[15px] leading-relaxed text-ink">{input.intro}</p>
       {interactive && (
         <>
           <div className="flex flex-wrap items-center gap-2">
-            <button type="button" className={secondary} disabled={locating} onClick={useMyLocation}>
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className="h-4 w-4">
+            <Button variant="secondary" size="sm" disabled={locating} onClick={useMyLocation}>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className="size-4" aria-hidden="true">
                 <circle cx="12" cy="12" r="3.5" />
                 <path d="M12 2v3M12 19v3M2 12h3M19 12h3" />
               </svg>
               {locating ? "Finding you…" : "Use my current location"}
-            </button>
-            <span className="text-xs text-zinc-500">or search / tap the map</span>
+            </Button>
+            <span className="text-[13px] text-muted">or search / tap the map</span>
           </div>
 
           <div className="relative">
+            <SearchIcon
+              size={16}
+              className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-muted"
+            />
             <input
               value={query}
               onChange={(e) => setQuery(e.currentTarget.value)}
               placeholder="Search an address or neighborhood"
-              className="w-full rounded-lg border border-zinc-300 bg-transparent px-3 py-2 text-sm outline-none focus:border-zinc-500 dark:border-zinc-700"
+              className="h-12 w-full rounded-lg border border-hairline bg-canvas pl-10 pr-3 text-[15px] text-ink outline-none transition-colors placeholder:text-muted focus:border-ink focus:shadow-[inset_0_0_0_1px_var(--color-ink)]"
             />
             {query.trim().length >= 3 && results.length > 0 && (
-              <ul className="absolute inset-x-0 top-full z-10 mt-1 overflow-hidden rounded-lg border border-zinc-200 bg-background shadow-lg dark:border-zinc-800">
+              <ul className="absolute inset-x-0 top-full z-10 mt-2 overflow-hidden rounded-card bg-canvas py-2 shadow-float">
                 {results.map((r) => (
                   <li key={`${r.lat},${r.lng}`}>
                     <button
                       type="button"
                       onClick={() => choose(r)}
-                      className="block w-full px-3 py-2 text-left text-sm hover:bg-zinc-50 dark:hover:bg-zinc-900"
+                      className="flex w-full items-center gap-3 px-4 py-2.5 text-left text-sm transition-colors hover:bg-surface-soft"
                     >
-                      <span className="font-medium">{r.short}</span>
-                      <span className="block truncate text-xs text-zinc-500">{r.label}</span>
+                      <span className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-surface-strong">
+                        <PinIcon size={16} />
+                      </span>
+                      <span className="min-w-0">
+                        <span className="block font-medium text-ink">{r.short}</span>
+                        <span className="block truncate text-[13px] text-muted">{r.label}</span>
+                      </span>
                     </button>
                   </li>
                 ))}
@@ -198,24 +209,23 @@ export function LocationRequest({
             )}
           </div>
 
-          <div ref={containerRef} className="h-64 overflow-hidden rounded-lg bg-zinc-100 dark:bg-zinc-900" />
+          <div ref={containerRef} className="h-64 overflow-hidden rounded-xl bg-surface-strong" />
 
-          {error && <div className="text-sm text-red-600 dark:text-red-400">{error}</div>}
+          {error && <div className="text-sm text-error">{error}</div>}
 
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div className="min-w-0 text-sm">
               {point ? (
                 <>
-                  <div className="font-medium">{naming ? "Looking up…" : (place?.short ?? "Pinned spot")}</div>
-                  <div className="text-xs text-zinc-500">Guests only see the area (about 1 km) until you accept them.</div>
+                  <div className="font-semibold text-ink">{naming ? "Looking up…" : (place?.short ?? "Pinned spot")}</div>
+                  <div className="text-[13px] text-muted">Guests only see the area (about 1 km) until you accept them.</div>
                 </>
               ) : (
-                <span className="text-zinc-500">No spot picked yet.</span>
+                <span className="text-muted">No spot picked yet.</span>
               )}
             </div>
-            <button
-              type="button"
-              className={primary}
+            <Button
+              size="sm"
               disabled={!point || naming}
               onClick={() =>
                 point &&
@@ -228,7 +238,7 @@ export function LocationRequest({
               }
             >
               That&apos;s my place
-            </button>
+            </Button>
           </div>
         </>
       )}

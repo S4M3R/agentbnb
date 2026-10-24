@@ -43,6 +43,8 @@ It has two sides:
 - **users**: our members, both guests and hosts. `email` is null for people who started in
   the web chat: it has no sign-in yet, so each browser holds a person key in an httpOnly
   cookie (`src/lib/session.ts`) and the user row is created the first time they host.
+  Each member has a public profile at `/people/[id]` (never email, addresses or exact
+  locations), edited at `/me/profile`, by the chat agent, or with `PATCH /api/v1/me`.
 - **agents**: a personal agent acting for a user; `kind` is `instinct` / `dot` / `muse` /
   `other` (self-declared, unverified), plus a `name`.
 - **api_keys**: bearer keys for `/api/v1`, held by the person (`agent_id` null) or one of
@@ -60,8 +62,16 @@ It has two sides:
 - **listing_publications**: a host's internal listing copied onto an external network
   (Trustroots, BeWelcome, ...), with status `queued` / `running` / `needs_user` / `live` /
   `failed` / `removed`, the live-view URL while a browser session is open, and the public URL.
-- **user_source_accounts**: a user's account on an external network; for hosting,
-  `credential_ref` is their Browserbase context id (saved cookies, so they log in once).
+- **user_source_accounts**: a user's account on an external network; `credential_ref` is their
+  Browserbase context id (saved cookies, so they log in once). `status: connected` means the
+  browser agent saw them logged in; the Keychain lists those as "Signed in (browser session)".
+- **keychain_entries**: the person's logins on other sites (`/me/keychain`), one per user + `site`
+  (a source id like `workaway`, or a bare domain for any other website). `login` is plain;
+  the password is only stored as `secret_ciphertext`. `created_by`: `person` | `agent`;
+  `status`: `active` | `unverified` (the agent created it and hasn't signed in with it yet) |
+  `failed` (the site rejected it). Same account as a `user_source_accounts` row with the same
+  (user_id, source_id). **keychain_settings**: per user, `allow_sign_up` ("let my agent create
+  accounts for me", on by default; no row = defaults).
 - **applications**: a guest applying to a listing (any source). `channel`: `internal` (goes to
   the host's inbox), `external_auto` (the browser agent applies on the site), `external_manual`
   (the guest did it themself). Status: `draft` → `queued` → `sending` / `needs_user` → `sent` →
@@ -115,17 +125,53 @@ It has two sides:
   `house_sit`, `exchange`), how easy each is to automate, and site hints for the browser agent.
 - `browser-agent.ts`: one Browserbase session per attempt (Stagehand driven by an AI SDK tool
   loop), run in `after()` on `/api/hosting/publications` (maxDuration 300). The chat card embeds
-  the live view; the host can take control at any time. Logins, sign-ups, CAPTCHAs and payment go
-  through `askHost`; the agent never types credentials. Out of time → the host taps Continue
+  the live view; the host can take control at any time. Logins go through the Keychain access
+  tools (below); CAPTCHAs, 2FA and payment go through `askHost`. Out of time → the host taps Continue
   and a new session resumes on the same saved context.
 - Stagehand must stay in `serverExternalPackages` (it uploads its extension zip from its package).
+- Hosting section: the header's Hosting tab is `/hosting` (Listings) with a sub-nav to `/requests`
+  (`HostingTabs`; `isActive` counts both). `/hosting` shows each listing with "Where it's listed"
+  (AgentBnB + every fitting network, `networksForListing`): publish/pause on AgentBnB (server
+  action), retry, watch, and "List on more sites". "Edit in chat" opens `/?prompt=…`.
+- Publish picker (`NetworkPicker` in `src/app/hosting.tsx`, view in `src/components/hosting/`):
+  tick networks, "Publish to N sites" sends one `POST /api/hosting/publications { listingId,
+  networks }`. The server starts up to `MAX_PARALLEL_RUNS` (3) browser runs per host and queues
+  the rest; the picker starts queued ones as runs finish. Same picker in the chat
+  (`recommendNetworks`, `addToNetworks`) and in the listings page's sheet.
 - Next: keep publications in sync when the listing changes, and pull requests from external
   networks into the agent's inbox.
+
+## Keychain and logging in on other sites (`src/lib/keychain.ts`, `src/lib/browser-access.ts`)
+- Browser agents try the task as-is first (listing page, apply button) and only deal with
+  accounts when the site gates the next step. Then, in order (`decideAccess` in `src/lib/access.ts`):
+  already signed in → continue; a Keychain login → `logIn` without asking; none → `signUp` (free
+  account, if the person allows it and has an email) or `askForLogin` (a `needs_user` request with
+  a secure form, or they log in themselves in the live browser); CAPTCHA / 2FA / email link /
+  paid membership → `askUser` / `askHost`. Never pay or start a membership. Unattended runs
+  (cron checks) can only `logIn`; otherwise they give up with "You're logged out".
+- A `needs_user` status event carries `data.ask` (`{ kind: "credentials" | "email" | "browser",
+  site, siteName }`); `latestAsk()` reads it, and `NeedsUserBlock` (`src/app/me/keychain/forms.tsx`)
+  shows the login or email form, else the live browser / Continue, on `/applications/[id]`, the
+  chat's application panel and `/me/keychain`.
+- Security rules:
+  - Passwords are encrypted at rest with AES-256-GCM (random 12-byte IV per entry, user id + site
+    as additional data) under `KEYCHAIN_KEY` (32 bytes, base64; in `.env.local` and Vercel for
+    every environment). Only `src/lib/keychain.ts` encrypts or decrypts.
+  - The model never sees a secret. `logIn` / `signUp` pass passwords to Stagehand only as `act()`
+    variables (its model sees `%password%`; the value is filled in inside the browser) with
+    `cache: false` (Stagehand's action cache key would include variable values), and return only
+    "signed_in" / "filled" / "failed" plus a scrubbed site message. Never put a secret in prompts,
+    tool results, notes, events, logs, `variables` of the general `act` tool, or Browserbase metadata.
+  - Passwords are write-only in the UI; "Reveal" works only for `created_by: agent` entries and
+    needs an explicit click. Server actions never log their arguments or error objects.
+  - The chat never asks for passwords; it points people to the Keychain. No public API for secrets.
 
 ## Applying for stays (`src/lib/applications.ts`, `src/lib/apply-agent.ts`)
 - The agent drafts one application per listing (intro in the guest's voice, tailored with
   `getListing`); the guest approves with Send / Send all on the chat cards (or says so in chat).
   Nothing is sent without that approval. Applying to several places at once is encouraged.
+- In the chat, a drafted or opened application shows in the side panel like a listing
+  (`src/app/application-panel.tsx`, data from `GET /api/applications/<id>`): intro, Send, activity and replies.
 - Every status change goes through `setStatus`, which logs the event and notifies the right
   side. `/applications` shows tabs (In progress / Confirmed / Closed); pages poll with
   `router.refresh()`. Hosts get requests in `/requests` (main's inbox, mirrored from internal
@@ -139,11 +185,15 @@ It has two sides:
   "no reply in 3 days" nudges. Opening the app also re-checks (at most every 30 min).
 
 ## Agent tools (AI SDK `tool()`s on `/api/chat`)
-- Search: `searchStays`, `getListing`, `getCoverage`.
+- Search: `searchStays`, `getListing`, `getCoverage`, and `askForDates` (client-side calendar, `src/app/date-request.tsx`;
+  limited to a listing's open windows and minimum stay when passed; web chat only, not A2A).
 - Hosting: `askForLocation`, `askForPhotos` (client-side), `saveListingDraft`, `publishListing`,
   `recommendNetworks`, `addToNetworks`, `getMyListings`.
-- Applying: `getMyApplications`, `updateMyProfile`, `applyToListings`, `sendApplications`,
+- Applying: `getMyApplications`, `applyToListings`, `sendApplications`,
   `messageHost`, `withdrawApplications`, `scheduleStay`, `respondToRequest` (hosts).
+- Profile: `getMyProfile`, `updateProfile` (name, photo, bio, home city, languages, plus the private
+  email in the web chat), filled from the conversation. `src/lib/agent/profile-tools.ts`; validation is
+  `ProfileInput` in `src/lib/profile.ts`, shared with `/me/profile` and `PATCH /api/v1/me`.
 
 ## A2A (agent-to-agent): Instinct and other personal agents (`src/lib/a2a/`)
 - Agent card at `/.well-known/agent-card.json` (also `/.well-known/agent.json`), JSON-RPC at `/a2a`. Speaks
@@ -152,8 +202,8 @@ It has two sides:
 - Same API keys as `/api/v1`, optional: anonymous callers can search, hosting needs a key. A bad key is a
   401, never a silent downgrade.
 - `agent.ts` runs the same stay tools as the web chat plus `shareLink`, and for keyed callers
-  `saveListingDraft` / `publishListing` / `getMyListings` (the client-side location/photo tools don't apply;
-  location comes as text, photos as image parts that `photos.ts` copies into Blob). Replies are plain text for
+  `saveListingDraft` / `publishListing` / `getMyListings`, and `getMyProfile` / `updateProfile` without
+  email (the client-side location/photo tools don't apply; location comes as text, photos as image parts that `photos.ts` copies into Blob). Replies are plain text for
   iMessage, ending with the share link; if the model forgets, the top search results get a link anyway.
 - Share pages `/s/[id]` are phone-first; `opengraph-image.tsx` draws the preview (photo mosaic + headline,
   Inter from `assets/fonts/`). Satori only draws JPEG/PNG/GIF, so photos are fetched and filtered first.
@@ -163,6 +213,13 @@ It has two sides:
 - UI follows `DESIGN.md` (Airbnb-inspired tokens and components, from
   VoltAgent/awesome-design-md, MIT). Read it before building or restyling UI.
   Airbnb Cereal is proprietary: use Inter, as the file's font note suggests.
+- Brand: the agent is **Couchbot** (`Couchbot` in `src/components/brand/logo.tsx`), a puffy
+  armchair that is both the logo and the agent's face. Moods: `idle`, `thinking` (while it works),
+  `happy`, `sleepy` (empty states, 404); `animated` adds blink / look-around / bob. The wordmark and
+  Couchbot's big lines (home greeting, 404) use Bricolage Grotesque (`font-brand`); the rest is Inter.
+- SEO lives in `src/app/layout.tsx` (metadata, JSON-LD), `src/lib/site.ts` (URL, name, copy),
+  `robots.ts`, `sitemap.ts`, `manifest.ts` and `opengraph-image.tsx`. Pages set a bare `title`;
+  the layout's template adds " · AgentBnB".
 
 ## Stack & conventions
 - Next.js 16 App Router under `src/`, Tailwind v4, pnpm. **Read
@@ -178,5 +235,8 @@ It has two sides:
   `vercel blob`. Admin endpoints use bearer `INGEST_TOKEN`.
 - Public API for people and their agents lives under `/api/v1` (register, me, keys, requests,
   background-checks) and A2A at `/a2a`, with
-  agent-readable docs at `/docs.md`. Errors are `{ error: { code, message } }`; keep
+  agent-readable docs at `/docs.md`, and a step-by-step setup guide at `/setup/<agent id>` (generic: `/setup`; one
+  page for people and agents, Markdown via `Accept: text/markdown` or `/setup.md?agent=<id>`; content in
+  `src/lib/setup-guide.ts`, agents in `src/lib/connect-agent.ts`) that the home banner's one-line prompts
+  point to. Its link previews are GIFs from `pnpm exec tsx tools/setup-previews.tsx`. Errors are `{ error: { code, message } }`; keep
   `/docs.md` in sync when endpoints change.
