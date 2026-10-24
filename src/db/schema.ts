@@ -672,3 +672,51 @@ export const pushSubscriptions = pgTable(
   },
   (t) => [index("push_subscriptions_user_idx").on(t.userId)],
 );
+
+// ---------------------------------------------------------------------------
+// Agent-to-agent (A2A)
+// ---------------------------------------------------------------------------
+
+/**
+ * A short link (/s/<id>) to listings an agent picked, for another agent (Instinct, ...) to send
+ * its person in iMessage, where it unfurls with a generated preview image. One listing renders
+ * as a listing page, several as a list. Drafts only show when they belong to `userId`.
+ */
+export const shareLinks = pgTable(
+  "share_links",
+  {
+    id: text("id").primaryKey(), // short, URL-safe; the path segment
+    title: text("title").notNull(),
+    note: text("note"),
+    listingIds: uuid("listing_ids").array().notNull(),
+    startDate: date("start_date"),
+    endDate: date("end_date"),
+    /** The person the link was made for, when the caller was authenticated. */
+    userId: uuid("user_id").references(() => users.id, { onDelete: "cascade" }),
+    /** The agent that asked for it, shown as "Sent by Instinct". */
+    agentId: uuid("agent_id").references(() => agents.id, { onDelete: "set null" }),
+    createdAt: timestamps.createdAt,
+  },
+  (t) => [index("share_links_user_idx").on(t.userId)],
+);
+
+/**
+ * One A2A turn: the caller's message and our reply. Turns sharing a `contextId` are one
+ * conversation; `modelMessages` replays it to the model. Anonymous callers have no `userId`.
+ */
+export const a2aTasks = pgTable(
+  "a2a_tasks",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    contextId: text("context_id").notNull(),
+    userId: uuid("user_id").references(() => users.id, { onDelete: "cascade" }),
+    agentId: uuid("agent_id").references(() => agents.id, { onDelete: "set null" }),
+    state: text("state").notNull(), // completed | failed (we answer synchronously)
+    /** The A2A messages, caller's then ours, in 1.0 JSON shape. */
+    history: jsonb("history").$type<Record<string, unknown>[]>().notNull(),
+    artifacts: jsonb("artifacts").$type<Record<string, unknown>[]>().notNull().default([]),
+    modelMessages: jsonb("model_messages").$type<unknown[]>().notNull().default([]),
+    ...timestamps,
+  },
+  (t) => [index("a2a_tasks_context_idx").on(t.contextId, t.createdAt)],
+);

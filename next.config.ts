@@ -10,6 +10,8 @@ const nextConfig: NextConfig = {
   outputFileTracingIncludes: {
     "/api/hosting/publications/**": ["./node_modules/@browserbasehq/stagehand/dist/assets/**"],
     "/api/applications/run": ["./node_modules/@browserbasehq/stagehand/dist/assets/**"],
+    // Fonts for the share links' generated preview images.
+    "/s/**": ["./assets/fonts/**"],
   },
   turbopack: {
     rules: {
