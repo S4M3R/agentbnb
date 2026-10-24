@@ -25,6 +25,58 @@ async function friendly<T>(fn: () => Promise<T>): Promise<T | { error: string }>
   }
 }
 
+const PhotoShot = z.object({
+  id: z.string().describe('Short slug, e.g. "bed".'),
+  label: z.string().describe('What to photograph, e.g. "Where you\'ll sleep".'),
+  tip: z.string().describe('One concrete tip, e.g. "Stand in the doorway so the whole bed is in frame. Open the curtains."'),
+});
+
+/**
+ * Client-side tool (no execute): the chat shows a shot list with a camera view, and the browser
+ * returns the uploaded photos with addToolOutput. The model gets them back as images.
+ */
+export const askForPhotos = tool({
+  description:
+    "Ask the host for photos of their place. The user sees your shot list with a tip per shot and can open " +
+    "their camera right in the chat (or upload from their library). Returns the photos once they're done.",
+  inputSchema: z.object({
+    intro: z.string().max(200).describe("One friendly line shown above the shot list."),
+    shots: z.array(PhotoShot).min(1).max(6).describe("Tailored to their place, most important first."),
+  }),
+  outputSchema: z.object({
+    photos: z.array(z.object({ url: z.string(), shot: z.string().nullable() })),
+    skipped: z.boolean().optional(),
+  }),
+  toModelOutput: ({ output }) => ({
+    type: "content",
+    value: output.photos.length
+      ? output.photos.flatMap((p, i) => [
+          { type: "text" as const, text: `Photo ${i + 1}${p.shot ? ` (${p.shot})` : ""}: ${p.url}` },
+          { type: "file" as const, mediaType: "image/jpeg", data: { type: "url" as const, url: new URL(p.url) } },
+        ])
+      : [{ type: "text" as const, text: "The user skipped photos for now." }],
+  }),
+});
+
+/**
+ * Client-side tool (no execute): the chat shows "Use my location" and a map to drop a pin on.
+ * Returns the chosen point and a short place name.
+ */
+export const askForLocation = tool({
+  description:
+    "Ask where the host's place is. The user can share their current location or pick the spot on a map (and " +
+    "search it). Use this instead of asking them to type an address. Pass the result's point to saveListingDraft.",
+  inputSchema: z.object({
+    intro: z.string().max(200).describe('One friendly line, e.g. "Where\'s your place? Only guests you accept see the exact spot."'),
+  }),
+  outputSchema: z.object({
+    point: z.object({ lat: z.number(), lng: z.number() }),
+    label: z.string().describe('Short place name, e.g. "Mission, San Francisco".'),
+    address: z.string().describe("Full address from the map, kept private."),
+    source: z.enum(["gps", "map"]),
+  }),
+});
+
 export function hostingTools(session: WebSession) {
   async function hostId() {
     const user = await session.user();
@@ -33,6 +85,9 @@ export function hostingTools(session: WebSession) {
   }
 
   return {
+    askForLocation,
+    askForPhotos,
+
     saveListingDraft: tool({
       description:
         "Create or update the user's own listing as a draft from what they told you and the photos they attached. " +

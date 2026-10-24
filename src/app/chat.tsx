@@ -1,10 +1,12 @@
 "use client";
 
 import { useChat } from "@ai-sdk/react";
-import type { FileUIPart } from "ai";
+import { lastAssistantMessageIsCompleteWithToolCalls, type FileUIPart } from "ai";
 import { Fragment, useEffect, useRef, useState, type ReactNode } from "react";
 import type { AgentUIMessage } from "@/lib/agent/tools";
 import { ListingPreview, NetworkPicker, PublicationCard } from "./hosting";
+import { LocationRequest } from "./location-request";
+import { PhotoRequest } from "./photo-request";
 import { uploadPhoto } from "./photo-upload";
 
 type SearchOutput = Extract<AgentUIMessage["parts"][number], { type: "tool-searchStays"; state: "output-available" }>["output"];
@@ -22,7 +24,10 @@ const SUGGESTIONS = [
 ];
 
 export function Chat() {
-  const { messages, sendMessage, status, stop, error, regenerate } = useChat<AgentUIMessage>();
+  const { messages, sendMessage, status, stop, error, regenerate, addToolOutput } = useChat<AgentUIMessage>({
+    // askForLocation / askForPhotos are answered in the browser; send once they are.
+    sendAutomaticallyWhen: lastAssistantMessageIsCompleteWithToolCalls,
+  });
   const [input, setInput] = useState("");
   const [attachments, setAttachments] = useState<Attachment[]>([]);
   const bottomRef = useRef<HTMLDivElement>(null);
@@ -144,6 +149,32 @@ export function Chat() {
                       if (p.state === "output-available") return <ListingDetail key={key} output={p.output} />;
                       if (p.state === "output-error") return <ToolError key={key} label="Couldn't load listing" />;
                       return <ToolPending key={key} label="Reading the listing…" />;
+                    case "tool-askForLocation":
+                      if (p.state === "input-streaming") return <ToolPending key={key} label="Opening the map…" />;
+                      if (p.state === "output-error") return <ToolError key={key} label="Couldn't get the location" />;
+                      return (
+                        <LocationRequest
+                          key={key}
+                          input={p.input}
+                          done={p.state === "output-available" ? p.output : undefined}
+                          disabled={m.id !== messages.at(-1)?.id}
+                          onDone={(output) =>
+                            addToolOutput({ tool: "askForLocation", toolCallId: p.toolCallId, output })
+                          }
+                        />
+                      );
+                    case "tool-askForPhotos":
+                      if (p.state === "input-streaming") return <ToolPending key={key} label="Making a shot list…" />;
+                      if (p.state === "output-error") return <ToolError key={key} label="Couldn't get the photos" />;
+                      return (
+                        <PhotoRequest
+                          key={key}
+                          input={p.input}
+                          done={p.state === "output-available" ? p.output : undefined}
+                          disabled={m.id !== messages.at(-1)?.id}
+                          onDone={(output) => addToolOutput({ tool: "askForPhotos", toolCallId: p.toolCallId, output })}
+                        />
+                      );
                     case "tool-saveListingDraft":
                     case "tool-publishListing":
                       if (p.state === "output-available")
@@ -219,7 +250,8 @@ export function Chat() {
             </button>
           </div>
         )}
-        <div ref={bottomRef} />
+        {/* scroll margin keeps the last message clear of the sticky composer */}
+        <div ref={bottomRef} className="scroll-mb-36" />
       </main>
 
       <form

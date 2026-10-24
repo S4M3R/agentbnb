@@ -89,8 +89,13 @@ It has two sides:
   otherwise pages overlap and listings get missed.
 
 ## Hosting: adding your place (`src/lib/hosting/`)
-- The agent asks only for the location and photos (and suggests which photos to take),
-  writes the listing itself, and shows a preview card. Publishing to AgentBnB waits for the
+- A casual back-and-forth, one question per turn. The agent asks where the place is with
+  `askForLocation` (share current location, or search / drop a pin on a map) and for photos
+  with `askForPhotos` (a shot list with a tip per shot and a full-screen camera that walks
+  through it; library upload and the OS camera as fallbacks). Both are client-side tools: no
+  `execute`, the browser answers with `addToolOutput` and the chat re-sends automatically.
+  `askForPhotos` returns the images to the model via `toModelOutput`.
+- It writes the listing itself and shows a preview card. Publishing to AgentBnB waits for the
   host's OK unless they said to publish right away.
 - Photos go straight from the browser to Vercel Blob (`/api/hosting/photos`, client upload,
   shrunk to 1600px). The chat route appends the photo URLs as text so the model can pass them on.
@@ -106,7 +111,8 @@ It has two sides:
   networks into the agent's inbox.
 
 ## Agent tools (AI SDK `tool()`s on `/api/chat`)
-- Done: `searchStays`, `getListing`, `getCoverage`; hosting: `saveListingDraft`, `publishListing`,
+- Done: `searchStays`, `getListing`, `getCoverage`; hosting: `askForLocation`, `askForPhotos`
+  (client-side), `saveListingDraft`, `publishListing`,
   `recommendNetworks`, `addToNetworks`, `getMyListings`.
 - Planned:
   - `requestStay`: send a request to an internal host (writes the guest intro, notifies the host)
