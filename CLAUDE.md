@@ -41,6 +41,10 @@ It has two sides:
 
 ## Domain model (`src/db/schema.ts`)
 - **users**: our members, both guests and hosts.
+- **agents**: a personal agent acting for a user; `kind` is `instinct` / `dot` / `muse` /
+  `other` (self-declared, unverified), plus a `name`.
+- **api_keys**: bearer keys for `/api/v1`, held by the person (`agent_id` null) or one of
+  their agents. Only the SHA-256 is stored. See `src/lib/api-auth.ts`.
 - **sources**: platforms we pull from (`internal` = our own network), with `kind`
   (couch / house_sit / work_exchange / ...) and `access` (public / login / partner_api).
 - **listings**: one table for internal and scraped stays; unique on
@@ -91,3 +95,6 @@ It has two sides:
 - Vercel project: `s4m3rs-projects/agentbnb`. Pull env with `vercel env pull --yes`.
 - Neon (`agentbnb-db`) and Vercel Blob (`agentbnb-photos`) are attached via the
   Vercel Marketplace / `vercel blob`. Admin endpoints use bearer `INGEST_TOKEN`.
+- Public API for people and their agents lives under `/api/v1` (register, me, keys), with
+  agent-readable docs at `/docs.md`. Errors are `{ error: { code, message } }`; keep
+  `/docs.md` in sync when endpoints change.
