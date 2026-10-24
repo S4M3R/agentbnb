@@ -70,7 +70,7 @@ async function agentbnbScrapeWorkingTraveller({
       barter: clean(doc.querySelector(".barter .wt_daily_barter")?.textContent) || null,
       skills: lists.find((l) => /Required Skills/i.test(l.h))?.items ?? [],
       languages: lists.find((l) => /Languages/i.test(l.h))?.items ?? [],
-      hostAvatar: doc.querySelector('img.avatar[alt="Profile Photo"]')?.src ?? null,
+      hostAvatar: doc.querySelector('img[alt="Profile Photo"]')?.getAttribute("src")?.trim() || null,
     };
   };
 
