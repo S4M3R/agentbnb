@@ -1,52 +1,144 @@
 "use client";
 
-import { useChat } from "@ai-sdk/react";
+import { useChat, type UseChatHelpers } from "@ai-sdk/react";
 import { lastAssistantMessageIsCompleteWithToolCalls, type FileUIPart } from "ai";
-import { Fragment, useEffect, useRef, useState, type ReactNode } from "react";
+import { Fragment, useEffect, useRef, useState } from "react";
+import { AttachmentTray } from "@/components/chat/attachments";
+import { Composer } from "@/components/chat/composer";
+import { ChatColumn, ComposerDock, Conversation } from "@/components/chat/conversation";
+import { ChatHome } from "@/components/chat/home";
+import { AssistantMessage, AssistantText, ToolStatus, UserMessage } from "@/components/chat/messages";
+import { StarterCards, type Starter } from "@/components/chat/starter-cards";
+import { AppShell } from "@/components/shell/app-shell";
+import { SidePanel } from "@/components/shell/side-panel";
+import { Sidebar, type SidebarNavItem } from "@/components/shell/sidebar";
+import { TopBar } from "@/components/shell/top-bar";
+import { toStayCard, toStayPanel } from "@/components/stays/adapters";
+import { TYPE_LABEL } from "@/components/stays/format";
+import { StayLink } from "@/components/stays/stay-link";
+import { StayPanel } from "@/components/stays/stay-panel";
+import { StayResults } from "@/components/stays/stay-results";
+import type { StayDetails } from "@/components/stays/types";
+import { Button, ButtonLink } from "@/components/ui/button";
+import { ExternalIcon, HomeIcon, MapIcon, NewChatIcon, SuitcaseIcon } from "@/components/ui/icons";
 import type { AgentUIMessage } from "@/lib/agent/tools";
-import { ApplicationCards, ApplicationsLink } from "./application-cards";
+import { ApplicationCards } from "./application-cards";
 import { ListingPreview, NetworkPicker, PublicationCard } from "./hosting";
 import { LocationRequest } from "./location-request";
 import { PhotoRequest } from "./photo-request";
 import { uploadPhoto } from "./photo-upload";
 
-type SearchOutput = Extract<AgentUIMessage["parts"][number], { type: "tool-searchStays"; state: "output-available" }>["output"];
-type ListingCard = SearchOutput["results"][number];
-type ListingOutput = Extract<AgentUIMessage["parts"][number], { type: "tool-getListing"; state: "output-available" }>["output"];
+const unsplash = (id: string) => `https://images.unsplash.com/photo-${id}?w=600&q=70&auto=format&fit=crop`;
+
+const STARTERS: Starter[] = [
+  {
+    title: "A couch tonight",
+    prompt: "I just got to Oakland and need a place this weekend",
+    photo: unsplash("1555041469-a586c61ea9bc"),
+  },
+  {
+    title: "Host this weekend",
+    prompt: "Put my place up for this weekend",
+    photo: unsplash("1505693416388-ac5ce068fe85"),
+  },
+  {
+    title: "Sit a cat",
+    prompt: "Any cat sits in San Francisco in December?",
+    photo: unsplash("1514888286974-6c03e2ca1dba"),
+  },
+  {
+    title: "Work on a farm",
+    prompt: "Find me a farm work exchange in California",
+    photo: unsplash("1500382017468-9049fed747ef"),
+  },
+];
+
+/** Sidebar links; `unread` counts application updates the guest hasn't seen. */
+function navItems(unread: number): SidebarNavItem[] {
+  return [
+    {
+      label: "My applications",
+      href: "/applications",
+      icon: <SuitcaseIcon size={18} strokeWidth={1.9} />,
+      count: unread > 0 ? Math.min(unread, 99) : undefined,
+    },
+    { label: "Host requests", href: "/requests", icon: <HomeIcon size={18} strokeWidth={1.9} /> },
+    { label: "Map of stays", href: "/map", icon: <MapIcon size={18} strokeWidth={1.9} /> },
+  ];
+}
+
+/** Unread application updates, refreshed every 30s while the tab is visible. */
+function useUnreadApplications() {
+  const [unread, setUnread] = useState(0);
+  useEffect(() => {
+    let stopped = false;
+    async function load() {
+      const res = await fetch("/api/applications").catch(() => null);
+      if (res?.ok && !stopped) setUnread((await res.json()).unread ?? 0);
+    }
+    load();
+    const timer = setInterval(() => document.visibilityState === "visible" && load(), 30_000);
+    return () => {
+      stopped = true;
+      clearInterval(timer);
+    };
+  }, []);
+  return unread;
+}
+
+type Part = AgentUIMessage["parts"][number];
 
 type Attachment = { id: string; preview: string; file?: FileUIPart; failed?: boolean };
 
-const SUGGESTIONS = [
-  "I just got to Oakland and need a place this weekend",
-  "Put my place up for this weekend",
-  "Any cat sits in San Francisco in December?",
-  "Find me a farm work exchange in California",
-  "What can you search right now?",
-];
+/** Every listing the agent has loaded in this chat, by tool call id. */
+function listingsIn(messages: AgentUIMessage[]) {
+  const found = new Map<string, StayDetails>();
+  for (const m of messages)
+    for (const p of m.parts)
+      if (p.type === "tool-getListing" && p.state === "output-available" && !("error" in p.output))
+        found.set(p.toolCallId, p.output);
+  return found;
+}
 
-export function Chat() {
-  const { messages, sendMessage, status, stop, error, regenerate, addToolOutput } = useChat<AgentUIMessage>({
-    // askForLocation / askForPhotos are answered in the browser; send once they are.
-    sendAutomaticallyWhen: lastAssistantMessageIsCompleteWithToolCalls,
-  });
+export function Chat({ initialMessages }: { initialMessages?: AgentUIMessage[] }) {
+  const { messages, setMessages, sendMessage, status, stop, error, regenerate, addToolOutput } =
+    useChat<AgentUIMessage>({
+      messages: initialMessages,
+      // askForLocation / askForPhotos are answered in the browser; send once they are.
+      sendAutomaticallyWhen: lastAssistantMessageIsCompleteWithToolCalls,
+    });
+  const unread = useUnreadApplications();
   const [input, setInput] = useState("");
   const [attachments, setAttachments] = useState<Attachment[]>([]);
   const bottomRef = useRef<HTMLDivElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const busy = status === "submitted" || status === "streaming";
+  const empty = messages.length === 0;
   const uploading = attachments.some((a) => !a.file && !a.failed);
-  // Each listing card is a snapshot; only the newest one for a listing keeps its buttons.
+  const ready = attachments.flatMap((a) => (a.file ? [a.file] : []));
+
+  // Each host listing card is a snapshot; only the newest one for a listing keeps its buttons.
   const latestCard = new Map<string, string>();
   for (const m of messages)
     m.parts.forEach((p, i) => {
       if ((p.type === "tool-saveListingDraft" || p.type === "tool-publishListing") && p.state === "output-available")
         if (!("error" in p.output)) latestCard.set(p.output.id, `${m.id}-${i}`);
     });
-  const ready = attachments.flatMap((a) => (a.file ? [a.file] : []));
+
+  // The newest stay the agent loads opens in the side panel; the guest can close it or open another.
+  const listings = listingsIn(messages);
+  const newest = [...listings.keys()].at(-1) ?? null;
+  const [panelId, setPanelId] = useState(newest);
+  const [seenNewest, setSeenNewest] = useState(newest);
+  if (newest !== seenNewest) {
+    setSeenNewest(newest);
+    setPanelId(newest);
+  }
+  const panel = panelId ? listings.get(panelId) : undefined;
 
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
-  }, [messages, status]);
+    if (!empty) bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+  }, [messages, status, empty]);
 
   function send(text: string) {
     const t = text.trim();
@@ -72,477 +164,307 @@ export function Chat() {
     if (fileRef.current) fileRef.current.value = "";
   }
 
-  return (
-    <div className="mx-auto flex w-full max-w-3xl flex-1 flex-col px-4">
-      <header className="sticky top-0 z-10 flex items-center justify-between bg-background/90 py-4 backdrop-blur">
-        <span className="text-sm font-semibold tracking-tight">AgentBnB</span>
-        <div className="flex items-center gap-5">
-          <ApplicationsLink />
-          {messages.length > 0 && (
-            <button
-              type="button"
-              onClick={() => window.location.reload()}
-              className="text-sm text-zinc-500 hover:text-foreground"
-            >
-              New chat
-            </button>
-          )}
-        </div>
-      </header>
+  function removeAttachment(id: string) {
+    setAttachments((list) =>
+      list.filter((a) => {
+        if (a.id === id) URL.revokeObjectURL(a.preview);
+        return a.id !== id;
+      }),
+    );
+  }
 
-      <main className="flex flex-1 flex-col gap-6 pb-6">
-        {messages.length === 0 ? (
-          <div className="flex flex-1 flex-col justify-center gap-6 py-16">
-            <div className="space-y-2">
-              <h1 className="text-3xl font-semibold tracking-tight">Where do you need a place to stay?</h1>
-              <p className="max-w-lg text-zinc-600 dark:text-zinc-400">
-                I search house sits, work exchanges and couches across every marketplace, then help you
-                reach out to the host. Got a spare couch? I can list it everywhere for you.
-              </p>
-            </div>
-            <div className="flex flex-wrap gap-2">
-              {SUGGESTIONS.map((s) => (
-                <button
-                  key={s}
-                  type="button"
-                  onClick={() => send(s)}
-                  className="rounded-full border border-zinc-200 px-3.5 py-1.5 text-sm text-zinc-700 transition-colors hover:border-zinc-400 hover:text-foreground dark:border-zinc-800 dark:text-zinc-300 dark:hover:border-zinc-600"
-                >
-                  {s}
-                </button>
-              ))}
-            </div>
+  function newChat() {
+    stop();
+    setMessages([]);
+    setPanelId(null);
+  }
+
+  const firstQuestion = messages.find((m) => m.role === "user")?.parts.find((p) => p.type === "text")?.text;
+
+  const composer = (
+    <Composer
+      value={input}
+      onChange={setInput}
+      onSubmit={() => send(input)}
+      onStop={stop}
+      busy={busy}
+      large={empty}
+      autoFocus={empty}
+      placeholder={empty ? "Where do you need to stay, or what do you want to list?" : "Ask a follow-up…"}
+      onAttach={() => fileRef.current?.click()}
+      canSend={(Boolean(input.trim()) || ready.length > 0) && !uploading}
+      attachments={
+        attachments.length > 0 && (
+          <AttachmentTray
+            items={attachments.map((a) => ({
+              id: a.id,
+              preview: a.preview,
+              state: a.failed ? "failed" : a.file ? "ready" : "uploading",
+            }))}
+            onRemove={removeAttachment}
+          />
+        )
+      }
+    />
+  );
+
+  return (
+    <AppShell sidebar={<Sidebar onNewChat={newChat} nav={navItems(unread)} />}>
+      <input
+        ref={fileRef}
+        type="file"
+        accept="image/*"
+        multiple
+        hidden
+        onChange={(e) => attach(e.currentTarget.files)}
+      />
+      <ChatColumn>
+        <TopBar
+          title={firstQuestion}
+          actions={
+            !empty && (
+              <Button variant="ghost" size="sm" onClick={newChat} aria-label="New chat" className="max-sm:px-3">
+                <NewChatIcon size={16} />
+                <span className="max-sm:hidden">New chat</span>
+              </Button>
+            )
+          }
+        />
+
+        {empty ? (
+          <div className="min-h-0 flex-1 overflow-y-auto">
+            <ChatHome
+              greeting="Where to next?"
+              subtitle="Tell me where you're going, or put your own place up."
+              composer={composer}
+              starters={<StarterCards starters={STARTERS} onPick={send} />}
+            />
           </div>
         ) : (
-          messages.map((m) =>
-            m.role === "user" ? (
-              <div key={m.id} className="flex justify-end">
-                <div className="flex max-w-[80%] flex-col items-end gap-2">
-                  {m.parts.some((p) => p.type === "file") && (
-                    <div className="flex flex-wrap justify-end gap-1.5">
-                      {m.parts.map((p, i) =>
-                        p.type === "file" && p.mediaType.startsWith("image/") ? (
-                          // eslint-disable-next-line @next/next/no-img-element -- user-uploaded Blob photos
-                          <img key={i} src={p.url} alt="" className="h-24 w-24 rounded-xl object-cover" />
-                        ) : null,
-                      )}
-                    </div>
-                  )}
-                  <div className="whitespace-pre-wrap rounded-2xl bg-zinc-100 px-4 py-2.5 dark:bg-zinc-800">
-                    {m.parts.map((p, i) => (p.type === "text" ? <Fragment key={i}>{p.text}</Fragment> : null))}
-                  </div>
-                </div>
-              </div>
-            ) : (
-              <div key={m.id} className="flex flex-col gap-3">
-                {m.parts.map((p, i) => {
-                  const key = `${m.id}-${i}`;
-                  switch (p.type) {
-                    case "text":
-                      return (
-                        <div key={key} className="whitespace-pre-wrap leading-relaxed">
-                          <RichText text={p.text} />
-                        </div>
-                      );
-                    case "tool-searchStays":
-                      if (p.state === "output-available")
-                        return <SearchResults key={key} output={p.output} onAsk={send} />;
-                      if (p.state === "output-error") return <ToolError key={key} label="Search failed" />;
-                      return <ToolPending key={key} label={searchLabel(p.input)} />;
-                    case "tool-getListing":
-                      if (p.state === "output-available") return <ListingDetail key={key} output={p.output} onAsk={send} />;
-                      if (p.state === "output-error") return <ToolError key={key} label="Couldn't load listing" />;
-                      return <ToolPending key={key} label="Reading the listing…" />;
-                    case "tool-askForLocation":
-                      if (p.state === "input-streaming") return <ToolPending key={key} label="Opening the map…" />;
-                      if (p.state === "output-error") return <ToolError key={key} label="Couldn't get the location" />;
-                      return (
-                        <LocationRequest
-                          key={key}
-                          input={p.input}
-                          done={p.state === "output-available" ? p.output : undefined}
-                          disabled={m.id !== messages.at(-1)?.id}
-                          onDone={(output) =>
-                            addToolOutput({ tool: "askForLocation", toolCallId: p.toolCallId, output })
-                          }
-                        />
-                      );
-                    case "tool-askForPhotos":
-                      if (p.state === "input-streaming") return <ToolPending key={key} label="Making a shot list…" />;
-                      if (p.state === "output-error") return <ToolError key={key} label="Couldn't get the photos" />;
-                      return (
-                        <PhotoRequest
-                          key={key}
-                          input={p.input}
-                          done={p.state === "output-available" ? p.output : undefined}
-                          disabled={m.id !== messages.at(-1)?.id}
-                          onDone={(output) => addToolOutput({ tool: "askForPhotos", toolCallId: p.toolCallId, output })}
-                        />
-                      );
-                    case "tool-saveListingDraft":
-                    case "tool-publishListing":
-                      if (p.state === "output-available")
-                        return "error" in p.output ? (
-                          <ToolError key={key} label={p.output.error} />
-                        ) : (
-                          <ListingPreview
-                            key={key}
-                            listing={p.output}
-                            onSend={send}
-                            stale={latestCard.get(p.output.id) !== key}
-                          />
-                        );
-                      if (p.state === "output-error") return <ToolError key={key} label="Couldn't save the listing" />;
-                      return (
-                        <ToolPending
-                          key={key}
-                          label={p.type === "tool-publishListing" ? "Publishing…" : "Writing your listing…"}
-                        />
-                      );
-                    case "tool-recommendNetworks":
-                      if (p.state === "output-available")
-                        return "error" in p.output ? (
-                          <ToolError key={key} label={p.output.error} />
-                        ) : (
-                          <NetworkPicker key={key} listingId={p.output.listingId} networks={p.output.networks} />
-                        );
-                      if (p.state === "output-error") return <ToolError key={key} label="Couldn't load networks" />;
-                      return <ToolPending key={key} label="Picking networks…" />;
-                    case "tool-addToNetworks":
-                      if (p.state === "output-available")
-                        return "error" in p.output ? (
-                          <ToolError key={key} label={p.output.error} />
-                        ) : (
-                          <div key={key} className="space-y-2">
-                            {p.output.publications.map((pub) => (
-                              <PublicationCard key={pub.id} initial={pub} />
-                            ))}
-                          </div>
-                        );
-                      if (p.state === "output-error") return <ToolError key={key} label="Couldn't start publishing" />;
-                      return <ToolPending key={key} label="Opening the sites…" />;
-                    case "tool-getMyListings":
-                      if (p.state === "output-available")
-                        return (
-                          <div key={key} className="space-y-3">
-                            {p.output.listings.map((l) => (
-                              <ListingPreview key={l.id} listing={l} onSend={send} />
-                            ))}
-                          </div>
-                        );
-                      if (p.state === "output-error") return <ToolError key={key} label="Couldn't load your listings" />;
-                      return <ToolPending key={key} label="Checking your listings…" />;
-                    case "tool-applyToListings":
-                      if (p.state === "output-available")
-                        return "error" in p.output ? (
-                          <ToolError key={key} label={p.output.error} />
-                        ) : (
-                          <ApplicationCards key={key} cards={p.output.drafts} problems={p.output.problems} />
-                        );
-                      if (p.state === "output-error") return <ToolError key={key} label="Couldn't draft the applications" />;
-                      return <ToolPending key={key} label="Writing your applications…" />;
-                    case "tool-sendApplications":
-                      if (p.state === "output-available")
-                        return "error" in p.output ? (
-                          <ToolError key={key} label={p.output.error} />
-                        ) : (
-                          <ApplicationCards key={key} cards={p.output.applications} />
-                        );
-                      if (p.state === "output-error") return <ToolError key={key} label="Couldn't send" />;
-                      return <ToolPending key={key} label="Sending…" />;
-                    case "tool-getMyApplications":
-                      if (p.state === "output-error") return <ToolError key={key} label="Couldn't load your applications" />;
-                      if (p.state !== "output-available") return <ToolPending key={key} label="Checking your applications…" />;
-                      return null;
-                    case "tool-getCoverage":
-                      if (p.state === "output-error") return <ToolError key={key} label="Couldn't load coverage" />;
-                      if (p.state !== "output-available") return <ToolPending key={key} label="Checking coverage…" />;
-                      return null;
-                    default:
-                      return null;
-                  }
-                })}
-              </div>
-            ),
-          )
-        )}
-
-        {status === "submitted" && <ToolPending label="Thinking…" />}
-        {error && (
-          <div className="flex items-center gap-3 text-sm text-red-600 dark:text-red-400">
-            Something went wrong.
-            <button type="button" onClick={() => regenerate()} className="underline underline-offset-2">
-              Try again
-            </button>
-          </div>
-        )}
-        {/* scroll margin keeps the last message clear of the sticky composer */}
-        <div ref={bottomRef} className="scroll-mb-36" />
-      </main>
-
-      <form
-        onSubmit={(e) => {
-          e.preventDefault();
-          send(input);
-        }}
-        className="sticky bottom-0 bg-background pb-4"
-      >
-        <div className="rounded-2xl border border-zinc-200 p-2 shadow-sm focus-within:border-zinc-400 dark:border-zinc-800 dark:focus-within:border-zinc-600">
-          {attachments.length > 0 && (
-            <div className="flex flex-wrap gap-2 px-1 pb-2">
-              {attachments.map((a) => (
-                <div key={a.id} className="relative h-16 w-16 overflow-hidden rounded-lg">
-                  {/* eslint-disable-next-line @next/next/no-img-element -- local preview */}
-                  <img
-                    src={a.preview}
-                    alt=""
-                    className={`h-full w-full object-cover ${a.file ? "" : "opacity-50"} ${a.failed ? "grayscale" : ""}`}
-                  />
-                  {!a.file && !a.failed && (
-                    <div className="absolute inset-0 animate-pulse bg-white/30" aria-label="Uploading" />
-                  )}
-                  {a.failed && (
-                    <div className="absolute inset-x-0 bottom-0 bg-red-600 text-center text-[10px] text-white">Failed</div>
-                  )}
-                  <button
-                    type="button"
-                    aria-label="Remove photo"
-                    onClick={() => {
-                      URL.revokeObjectURL(a.preview);
-                      setAttachments((list) => list.filter((x) => x.id !== a.id));
-                    }}
-                    className="absolute right-0.5 top-0.5 flex h-5 w-5 items-center justify-center rounded-full bg-black/70 text-xs text-white"
+          <>
+            <Conversation endRef={bottomRef}>
+              {messages.map((m) =>
+                m.role === "user" ? (
+                  <UserMessage
+                    key={m.id}
+                    photos={m.parts.flatMap((p) =>
+                      p.type === "file" && p.mediaType.startsWith("image/") ? [p.url] : [],
+                    )}
                   >
-                    ×
+                    {m.parts.map((p, i) => (p.type === "text" ? <Fragment key={i}>{p.text}</Fragment> : null))}
+                  </UserMessage>
+                ) : (
+                  <AssistantMessage key={m.id}>
+                    {m.parts.map((p, i) => {
+                      const key = `${m.id}-${i}`;
+                      return (
+                        <PartView
+                          key={key}
+                          part={p}
+                          send={send}
+                          openListing={panelId}
+                          onOpenListing={setPanelId}
+                          stale={(id) => latestCard.get(id) !== key}
+                          last={m.id === messages.at(-1)?.id}
+                          addToolOutput={addToolOutput}
+                        />
+                      );
+                    })}
+                  </AssistantMessage>
+                ),
+              )}
+              {status === "submitted" && (
+                <AssistantMessage>
+                  <ToolStatus label="Thinking…" />
+                </AssistantMessage>
+              )}
+              {error && (
+                <div className="flex items-center gap-3 text-sm text-error">
+                  Something went wrong.
+                  <button type="button" onClick={() => regenerate()} className="font-medium underline underline-offset-2">
+                    Try again
                   </button>
                 </div>
-              ))}
-            </div>
-          )}
-          <div className="flex items-end gap-2">
-            <input
-              ref={fileRef}
-              type="file"
-              accept="image/*"
-              multiple
-              hidden
-              onChange={(e) => attach(e.currentTarget.files)}
-            />
-            <button
-              type="button"
-              onClick={() => fileRef.current?.click()}
-              aria-label="Add photos"
-              title="Add photos"
-              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl text-zinc-500 hover:bg-zinc-100 hover:text-foreground dark:hover:bg-zinc-800"
-            >
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className="h-5 w-5">
-                <path d="M4 8.5A2.5 2.5 0 0 1 6.5 6h1.6l1.2-1.8A1.5 1.5 0 0 1 10.5 3.5h3a1.5 1.5 0 0 1 1.2.7L15.9 6h1.6A2.5 2.5 0 0 1 20 8.5v9a2.5 2.5 0 0 1-2.5 2.5h-11A2.5 2.5 0 0 1 4 17.5z" />
-                <circle cx="12" cy="13" r="3.5" />
-              </svg>
-            </button>
-            <textarea
-              value={input}
-              onChange={(e) => setInput(e.currentTarget.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
-                  e.preventDefault();
-                  send(input);
-                }
-              }}
-              rows={1}
-              placeholder="Where do you need to stay, or what do you want to list?"
-              className="field-sizing-content max-h-40 flex-1 resize-none bg-transparent px-2 py-1.5 outline-none placeholder:text-zinc-400"
-            />
-            {busy ? (
-              <button
-                type="button"
-                onClick={() => stop()}
-                className="rounded-xl bg-zinc-200 px-3.5 py-1.5 text-sm font-medium dark:bg-zinc-800"
-              >
-                Stop
-              </button>
-            ) : (
-              <button
-                type="submit"
-                disabled={(!input.trim() && !ready.length) || uploading}
-                className="rounded-xl bg-foreground px-3.5 py-1.5 text-sm font-medium text-background disabled:opacity-30"
-              >
-                Send
-              </button>
-            )}
-          </div>
-        </div>
-      </form>
-    </div>
-  );
-}
-
-function searchLabel(input: { location?: string } | undefined) {
-  return input?.location ? `Searching ${input.location}…` : "Searching…";
-}
-
-function ToolPending({ label }: { label: string }) {
-  return <div className="animate-pulse text-sm text-zinc-500">{label}</div>;
-}
-
-function ToolError({ label }: { label: string }) {
-  return <div className="text-sm text-red-600 dark:text-red-400">{label}</div>;
-}
-
-function SearchResults({ output, onAsk }: { output: SearchOutput; onAsk: (text: string) => void }) {
-  if (output.results.length === 0) return <div className="text-sm text-zinc-500">No matches.</div>;
-  return (
-    <div className="space-y-2">
-      <div className="text-xs text-zinc-500">
-        Showing {output.results.length} of {output.total} matches
-      </div>
-      <div className="-mx-4 flex snap-x gap-3 overflow-x-auto px-4 pb-2">
-        {output.results.map((l) => (
-          <Card key={l.id} listing={l} onAsk={onAsk} />
-        ))}
-      </div>
-    </div>
-  );
-}
-
-const TYPE_LABEL: Record<string, string> = {
-  house_sit: "House sit",
-  work_exchange: "Work exchange",
-  farm_stay: "Farm stay",
-  couch: "Couch",
-  private_room: "Private room",
-  shared_room: "Shared room",
-  entire_place: "Entire place",
-};
-
-function Card({ listing: l, onAsk }: { listing: ListingCard; onAsk: (text: string) => void }) {
-  return (
-    <article className="flex w-64 shrink-0 snap-start flex-col overflow-hidden rounded-xl border border-zinc-200 dark:border-zinc-800">
-      <div className="aspect-[4/3] bg-zinc-100 dark:bg-zinc-900">
-        {l.photo && (
-          // eslint-disable-next-line @next/next/no-img-element -- third-party listing photos
-          <img src={l.photo} alt="" loading="lazy" className="h-full w-full object-cover" />
+              )}
+            </Conversation>
+            <ComposerDock note="Your agent can get things wrong. Check the details on the host's listing.">
+              {composer}
+            </ComposerDock>
+          </>
         )}
-      </div>
-      <div className="flex flex-1 flex-col gap-1.5 p-3 text-sm">
-        <div className="text-xs text-zinc-500">
-          {TYPE_LABEL[l.type] ?? l.type} · {l.source.name}
-        </div>
-        <h3 className="line-clamp-2 font-medium leading-snug">{l.title}</h3>
-        <div className="text-zinc-600 dark:text-zinc-400">
-          {l.location}
-          {l.distanceKm != null && l.distanceKm > 0 && ` · ${l.distanceKm} km`}
-        </div>
-        {l.dates.length > 0 && (
-          <div className="flex flex-wrap gap-1">
-            {l.dates.map((d) => (
-              <span key={d.start} className="rounded-md bg-zinc-100 px-1.5 py-0.5 text-xs dark:bg-zinc-800">
-                {formatRange(d.start, d.end)}
-              </span>
+      </ChatColumn>
+
+      {panel && (
+        <SidePanel label={panel.title ?? "Listing"} onClose={() => setPanelId(null)}>
+          <StayPanel
+            stay={toStayPanel(panel)}
+            label={[TYPE_LABEL[panel.type] ?? panel.type, panel.source.name].join(" · ")}
+            onClose={() => setPanelId(null)}
+            footer={
+              <>
+                {panel.url && (
+                  <ButtonLink href={panel.url} variant="secondary" size="sm">
+                    View on {panel.source.name}
+                    <ExternalIcon size={16} />
+                  </ButtonLink>
+                )}
+                <Button size="sm" onClick={() => send(applyPrompt(panel.title, panel.id))}>
+                  Apply
+                </Button>
+              </>
+            }
+          />
+        </SidePanel>
+      )}
+    </AppShell>
+  );
+}
+
+/** What the Apply buttons send; the agent drafts the application from it. */
+const applyPrompt = (title: string | null, id: string) => `Apply to "${title ?? "this listing"}" for me (listing ${id})`;
+
+function PartView({
+  part: p,
+  send,
+  openListing,
+  onOpenListing,
+  stale,
+  last,
+  addToolOutput,
+}: {
+  part: Part;
+  send: (text: string) => void;
+  openListing: string | null;
+  onOpenListing: (toolCallId: string) => void;
+  /** Whether a newer card for this host listing appears later in the chat. */
+  stale: (listingId: string) => boolean;
+  /** Whether this part's message is the newest; older browser-answered tools are read-only. */
+  last: boolean;
+  addToolOutput: UseChatHelpers<AgentUIMessage>["addToolOutput"];
+}) {
+  switch (p.type) {
+    case "text":
+      return p.text ? <AssistantText text={p.text} /> : null;
+    case "tool-searchStays":
+      if (p.state === "output-available")
+        return (
+          <StayResults
+            stays={p.output.results.map(toStayCard)}
+            total={p.output.total}
+            onOpen={(s) => send(`Tell me more about "${s.title}"`)}
+            onApply={(s) => send(applyPrompt(s.title, s.id))}
+          />
+        );
+      if (p.state === "output-error") return <ToolStatus failed label="The search failed." />;
+      return <ToolStatus label={p.input?.location ? `Searching ${p.input.location}…` : "Searching…"} />;
+    case "tool-getListing":
+      if (p.state === "output-available") {
+        if ("error" in p.output) return <ToolStatus failed label="That listing is gone." />;
+        const l = p.output;
+        return (
+          <StayLink
+            title={l.title ?? "This listing"}
+            detail={[l.location, l.source.name].filter(Boolean).join(" · ")}
+            photo={l.photos[0]}
+            open={openListing === p.toolCallId}
+            onOpen={() => onOpenListing(p.toolCallId)}
+          />
+        );
+      }
+      if (p.state === "output-error") return <ToolStatus failed label="Couldn't load that listing." />;
+      return <ToolStatus label="Reading the listing…" />;
+    case "tool-askForLocation":
+      if (p.state === "input-streaming") return <ToolStatus label="Opening the map…" />;
+      if (p.state === "output-error") return <ToolStatus failed label="Couldn't get the location." />;
+      return (
+        <LocationRequest
+          input={p.input}
+          done={p.state === "output-available" ? p.output : undefined}
+          disabled={!last}
+          onDone={(output) => addToolOutput({ tool: "askForLocation", toolCallId: p.toolCallId, output })}
+        />
+      );
+    case "tool-askForPhotos":
+      if (p.state === "input-streaming") return <ToolStatus label="Making a shot list…" />;
+      if (p.state === "output-error") return <ToolStatus failed label="Couldn't get the photos." />;
+      return (
+        <PhotoRequest
+          input={p.input}
+          done={p.state === "output-available" ? p.output : undefined}
+          disabled={!last}
+          onDone={(output) => addToolOutput({ tool: "askForPhotos", toolCallId: p.toolCallId, output })}
+        />
+      );
+    case "tool-saveListingDraft":
+    case "tool-publishListing":
+      if (p.state === "output-available")
+        return "error" in p.output ? (
+          <ToolStatus failed label={p.output.error} />
+        ) : (
+          <ListingPreview listing={p.output} onSend={send} stale={stale(p.output.id)} />
+        );
+      if (p.state === "output-error") return <ToolStatus failed label="Couldn't save the listing." />;
+      return <ToolStatus label={p.type === "tool-publishListing" ? "Publishing…" : "Writing your listing…"} />;
+    case "tool-recommendNetworks":
+      if (p.state === "output-available")
+        return "error" in p.output ? (
+          <ToolStatus failed label={p.output.error} />
+        ) : (
+          <NetworkPicker listingId={p.output.listingId} networks={p.output.networks} />
+        );
+      if (p.state === "output-error") return <ToolStatus failed label="Couldn't load networks." />;
+      return <ToolStatus label="Picking networks…" />;
+    case "tool-addToNetworks":
+      if (p.state === "output-available")
+        return "error" in p.output ? (
+          <ToolStatus failed label={p.output.error} />
+        ) : (
+          <div className="space-y-2">
+            {p.output.publications.map((pub) => (
+              <PublicationCard key={pub.id} initial={pub} />
             ))}
           </div>
-        )}
-        {l.highlights.length > 0 && (
-          <div className="line-clamp-2 text-xs text-zinc-500">{l.highlights.join(" · ")}</div>
-        )}
-        <div className="mt-auto flex items-center justify-between pt-2">
-          <button
-            type="button"
-            onClick={() => onAsk(`Tell me more about "${l.title}"`)}
-            className="text-sm font-medium hover:underline"
-          >
-            Details
-          </button>
-          <button
-            type="button"
-            onClick={() => onAsk(`Apply to "${l.title}" for me (listing ${l.id})`)}
-            className="rounded-lg bg-[#ff385c] px-3 py-1 text-xs font-medium text-white hover:bg-[#e00b41]"
-          >
-            Apply
-          </button>
-          {l.url && (
-            <a href={l.url} target="_blank" rel="noreferrer" className="text-xs text-zinc-500 hover:text-foreground">
-              Open ↗
-            </a>
-          )}
-        </div>
-      </div>
-    </article>
-  );
-}
-
-function ListingDetail({ output, onAsk }: { output: ListingOutput; onAsk: (text: string) => void }) {
-  if ("error" in output) return <ToolError label="Listing not found" />;
-  return (
-    <div className="space-y-2 rounded-xl border border-zinc-200 p-3 dark:border-zinc-800">
-      {output.photos.length > 0 && (
-        <div className="-mx-1 flex gap-2 overflow-x-auto px-1">
-          {output.photos.map((src) => (
-            // eslint-disable-next-line @next/next/no-img-element -- third-party listing photos
-            <img key={src} src={src} alt="" loading="lazy" className="h-28 w-40 shrink-0 rounded-lg object-cover" />
-          ))}
-        </div>
-      )}
-      <div className="flex items-baseline justify-between gap-3 text-sm">
-        <div className="min-w-0">
-          <div className="truncate font-medium">{output.title}</div>
-          <div className="text-zinc-500">
-            {output.location} · {output.source.name}
-            {output.host?.name && ` · hosted by ${output.host.name}`}
+        );
+      if (p.state === "output-error") return <ToolStatus failed label="Couldn't start publishing." />;
+      return <ToolStatus label="Opening the sites…" />;
+    case "tool-getMyListings":
+      if (p.state === "output-available")
+        return (
+          <div className="space-y-3">
+            {p.output.listings.map((l) => (
+              <ListingPreview key={l.id} listing={l} onSend={send} />
+            ))}
           </div>
-        </div>
-        <div className="flex shrink-0 items-center gap-3">
-          {output.url && (
-            <a href={output.url} target="_blank" rel="noreferrer" className="text-xs text-zinc-500 hover:text-foreground">
-              View on {output.source.name} ↗
-            </a>
-          )}
-          <button
-            type="button"
-            onClick={() => onAsk(`Apply to "${output.title}" for me (listing ${output.id})`)}
-            className="rounded-lg bg-[#ff385c] px-3 py-1.5 text-xs font-medium text-white hover:bg-[#e00b41]"
-          >
-            Apply
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-
-function formatRange(start: string, end: string) {
-  const [sy, sm, sd] = start.split("-").map(Number);
-  const [ey, em, ed] = end.split("-").map(Number);
-  const s = `${MONTHS[sm - 1]} ${sd}`;
-  if (sy !== ey) return `${s}, ${sy} – ${MONTHS[em - 1]} ${ed}, ${ey}`;
-  return sm === em ? `${s} – ${ed}` : `${s} – ${MONTHS[em - 1]} ${ed}`;
-}
-
-/** Just enough markdown for chat replies: **bold** and links. */
-function RichText({ text }: { text: string }) {
-  const nodes: ReactNode[] = [];
-  const re = /\*\*([^*]+)\*\*|\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)|(https?:\/\/[^\s)]+)/g;
-  let last = 0;
-  for (const m of text.matchAll(re)) {
-    nodes.push(text.slice(last, m.index));
-    const link = "underline underline-offset-2 hover:text-zinc-500";
-    if (m[1]) nodes.push(<strong key={m.index}>{m[1]}</strong>);
-    else if (m[2])
-      nodes.push(
-        <a key={m.index} href={m[3]} target="_blank" rel="noreferrer" className={link}>
-          {m[2]}
-        </a>,
-      );
-    else
-      nodes.push(
-        <a key={m.index} href={m[4]} target="_blank" rel="noreferrer" className={link}>
-          {m[4]}
-        </a>,
-      );
-    last = m.index + m[0].length;
+        );
+      if (p.state === "output-error") return <ToolStatus failed label="Couldn't load your listings." />;
+      return <ToolStatus label="Checking your listings…" />;
+    case "tool-applyToListings":
+      if (p.state === "output-available")
+        return "error" in p.output ? (
+          <ToolStatus failed label={p.output.error} />
+        ) : (
+          <ApplicationCards cards={p.output.drafts} problems={p.output.problems} />
+        );
+      if (p.state === "output-error") return <ToolStatus failed label="Couldn't draft the applications." />;
+      return <ToolStatus label="Writing your applications…" />;
+    case "tool-sendApplications":
+      if (p.state === "output-available")
+        return "error" in p.output ? (
+          <ToolStatus failed label={p.output.error} />
+        ) : (
+          <ApplicationCards cards={p.output.applications} />
+        );
+      if (p.state === "output-error") return <ToolStatus failed label="Couldn't send." />;
+      return <ToolStatus label="Sending…" />;
+    case "tool-getMyApplications":
+      if (p.state === "output-error") return <ToolStatus failed label="Couldn't load your applications." />;
+      if (p.state !== "output-available") return <ToolStatus label="Checking your applications…" />;
+      return null;
+    case "tool-getCoverage":
+      if (p.state === "output-error") return <ToolStatus failed label="Couldn't check coverage." />;
+      if (p.state !== "output-available") return <ToolStatus label="Checking what I can search…" />;
+      return null;
+    default:
+      return null;
   }
-  nodes.push(text.slice(last));
-  return <>{nodes}</>;
 }
