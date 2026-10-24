@@ -84,6 +84,9 @@ export const applicationChannel = pgEnum("application_channel", [
   "external_manual",
 ]);
 
+/** Which personal agent holds an API key. Self-declared at registration; we can't verify it. */
+export const agentKind = pgEnum("agent_kind", ["instinct", "dot", "muse", "other"]);
+
 export const applicationStatus = pgEnum("application_status", [
   "draft",
   "sent",
@@ -109,6 +112,42 @@ export const users = pgTable("users", {
   verified: boolean("verified").notNull().default(false),
   ...timestamps,
 });
+
+/** A personal agent (Instinct, Dot, Muse, ...) acting on behalf of one of our users. */
+export const agents = pgTable(
+  "agents",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    kind: agentKind("kind").notNull(),
+    name: text("name").notNull(), // "Instinct", or what an `other` agent calls itself
+    ...timestamps,
+  },
+  (t) => [uniqueIndex("agents_user_kind_name_idx").on(t.userId, t.kind, t.name)],
+);
+
+/**
+ * Bearer credentials for the public API. `agentId` null means the person themself holds the key.
+ * Only the SHA-256 of the key is stored; the key is shown once, when it's created.
+ */
+export const apiKeys = pgTable(
+  "api_keys",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    agentId: uuid("agent_id").references(() => agents.id, { onDelete: "cascade" }),
+    keyHash: text("key_hash").notNull().unique(),
+    prefix: text("prefix").notNull(), // first characters of the key, to tell keys apart
+    lastUsedAt: timestamp("last_used_at", { withTimezone: true }),
+    revokedAt: timestamp("revoked_at", { withTimezone: true }),
+    createdAt: timestamps.createdAt,
+  },
+  (t) => [index("api_keys_user_idx").on(t.userId)],
+);
 
 /** One row per platform we pull listings from. `internal` is our own network. */
 export const sources = pgTable("sources", {

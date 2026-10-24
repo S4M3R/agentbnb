@@ -133,15 +133,18 @@ export async function recordBatch(
 }
 
 /**
- * Close a run. On success, listings in the run's market that weren't seen
- * during the run are marked `gone`.
+ * Close a run. On a successful, complete run, listings in the run's market
+ * that weren't seen during the run are marked `gone`.
  */
-export async function finishRun(runId: string, opts: { error?: string | null }) {
+export async function finishRun(
+  runId: string,
+  opts: { error?: string | null; markGone?: boolean },
+) {
   const [run] = await db.select().from(scrapeRuns).where(eq(scrapeRuns.id, runId));
   if (!run) throw new Error(`Unknown run ${runId}`);
 
   let gone = 0;
-  if (!opts.error && run.market) {
+  if (!opts.error && opts.markGone !== false && run.market) {
     const rows = await db
       .update(listings)
       .set({ status: "gone" })

@@ -21,6 +21,10 @@ type WorkawayRaw = {
   calendar: { year: number; month: number; status: "green" | "yellow" | "red" }[];
 };
 
+function inCalifornia(lat: number | null, lng: number | null) {
+  return lat != null && lng != null && lat > 32.5 && lat < 42.1 && lng > -124.5 && lng < -114.1;
+}
+
 const WORDS: Record<string, number> = { one: 1, two: 2, three: 3, four: 4, five: 5, six: 6 };
 
 function parseGuests(text?: string) {
@@ -74,7 +78,7 @@ export const workaway: SourceAdapter = {
     if (!w?.id || !w.title) return null;
     const s = w.sections ?? {};
 
-    const languages = lines(s["Languages spoken"]).map((l) => l.split(":")[0].trim());
+    const languages = lines(s["Languages spoken"] ?? s["Languages"]).map((l) => l.split(":")[0].trim());
     const helpTypes = lines(s["Types of help and learning opportunities"]);
     const moreInfo = lines(s["A little more information"]);
 
@@ -91,7 +95,8 @@ export const workaway: SourceAdapter = {
       neighborhood: null,
       city: null,
       subregion: null,
-      region: w.region ?? null,
+      // The list page's region only applies to hosts actually inside it.
+      region: inCalifornia(w.lat, w.lng) ? (w.region ?? null) : null,
       countryCode: "US",
       lat: w.lat,
       lng: w.lng,
@@ -112,6 +117,8 @@ export const workaway: SourceAdapter = {
         whatElse: s["What else ..."] || null,
         digitalNomads: s["Can host digital nomads"] || null,
         pets: s["My animals / pets"] || null,
+        camperVanParking: s["Space for parking camper vans"] || null,
+        needsHelpNow: "Host is looking for help immediately" in s,
         minStay: w.minStay ?? null,
         replyRate: w.stats?.replyRate ?? null,
         lastReplied: w.stats?.lastReplied ?? null,

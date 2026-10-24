@@ -39,15 +39,33 @@ It has two sides:
   helps the guest reach out on that platform (deep links / drafted message).
   Those platforms have no public APIs.
 
-## Domain model (planned)
-- **User / Profile**: who you are, bio, languages, references. Used as both guest
-  and host.
-- **Listing**: a host's place (city, capacity, description, house rules).
-- **Availability**: date ranges when a listing is open ("this weekend").
-- **StayRequest**: guest → listing for dates, agent-written intro, status
-  (`pending` → `accepted` / `declined` → `scheduled`).
-- **Message**: guest ↔ host conversation tied to a request.
-- **Notification**: e.g. "new stay request" sent to a host.
+## Domain model (`src/db/schema.ts`)
+- **users**: our members, both guests and hosts.
+- **sources**: platforms we pull from (`internal` = our own network), with `kind`
+  (couch / house_sit / work_exchange / ...) and `access` (public / login / partner_api).
+- **listings**: one table for internal and scraped stays; unique on
+  `(source_id, external_id)`; `market` bucket (e.g. `sf-bay-area`) from lat/lng;
+  `location_precision` says how exact the coordinates are; source-specific
+  extras go in `attributes` (jsonb), the scraped record in `raw`.
+- **listing_photos**, **listing_availability** (date ranges), **external_hosts**.
+- **scrape_runs**: one row per ingest; complete runs mark unseen listings `gone`.
+- **user_source_accounts**, **applications**: for applying on a user's behalf (next phase).
+- Planned: messages, notifications.
+
+## Scraping conventions
+- Scrapers are browser scripts (`scripts/scrapers/<source>.browser.js`) run in a
+  tab on the source site; they download a JSON file that `pnpm ingest <file>`
+  loads. Mapping lives server-side in `src/lib/sources/<source>.ts` (register it
+  in `src/lib/sources/index.ts`).
+- Browser tabs can't reliably reach `localhost` (Chrome Local Network Access),
+  so prefer the download-file flow over posting to the local ingest API.
+- Only scrape public listing pages. Login-gated sites (Couchsurfing, BeWelcome,
+  Trustroots, Warmshowers) only via a user's own session or a partnership.
+- Don't store other people's data we don't need (e.g. sitter profiles attached
+  to past TrustedHousesitters assignments are stripped from `raw`). Never
+  scrape exact addresses.
+- Paginated APIs need a stable sort (TrustedHousesitters: `published desc`),
+  otherwise pages overlap and listings get missed.
 
 ## Agent tools (planned, AI SDK `tool()`s on `/api/chat`)
 - `listMyPlace`: publish/update the user's listing for given dates
@@ -56,6 +74,11 @@ It has two sides:
 - `respondToRequest`: host accepts/declines and replies
 - `scheduleStay`: confirm dates/arrival time
 - `getNotifications` / `getMyRequests`: inbox for both sides
+
+## Design
+- UI follows `DESIGN.md` (Airbnb-inspired tokens and components, from
+  VoltAgent/awesome-design-md, MIT). Read it before building or restyling UI.
+  Airbnb Cereal is proprietary: use Inter, as the file's font note suggests.
 
 ## Stack & conventions
 - Next.js 16 App Router under `src/`, Tailwind v4, pnpm. **Read
@@ -66,4 +89,5 @@ It has two sides:
 - Postgres via Drizzle ORM on Neon (`DATABASE_URL`, required everywhere,
   including local dev). Migrations: `pnpm db:generate` / `pnpm db:migrate`.
 - Vercel project: `s4m3rs-projects/agentbnb`. Pull env with `vercel env pull --yes`.
-- Neon (`agentbnb-db`) and Vercel Blob are attached via the Vercel Marketplace.
+- Neon (`agentbnb-db`) and Vercel Blob (`agentbnb-photos`) are attached via the
+  Vercel Marketplace / `vercel blob`. Admin endpoints use bearer `INGEST_TOKEN`.
