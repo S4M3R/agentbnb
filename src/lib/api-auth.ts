@@ -78,11 +78,11 @@ export const NewKey = z.object({
   agent: AgentInput.optional(),
 });
 
-function hashKey(key: string) {
+export function hashKey(key: string) {
   return createHash("sha256").update(key).digest("hex");
 }
 
-function mintKey() {
+export function mintKey() {
   const key = `${KEY_PREFIX}${randomBytes(24).toString("base64url")}`;
   return { key, keyHash: hashKey(key), prefix: key.slice(0, 12) };
 }
@@ -98,7 +98,7 @@ function isUniqueViolation(err: unknown) {
 
 export type Principal = {
   keyId: string;
-  user: { id: string; name: string; email: string };
+  user: { id: string; name: string; email: string | null };
   /** Null when the person holds the key themself. */
   agent: { id: string; kind: (typeof schema.agentKind.enumValues)[number]; name: string } | null;
 };

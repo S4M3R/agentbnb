@@ -40,7 +40,9 @@ It has two sides:
   Those platforms have no public APIs.
 
 ## Domain model (`src/db/schema.ts`)
-- **users**: our members, both guests and hosts.
+- **users**: our members, both guests and hosts. `email` is null for people who started in
+  the web chat: it has no sign-in yet, so each browser holds a person key in an httpOnly
+  cookie (`src/lib/session.ts`) and the user row is created the first time they host.
 - **agents**: a personal agent acting for a user; `kind` is `instinct` / `dot` / `muse` /
   `other` (self-declared, unverified), plus a `name`.
 - **api_keys**: bearer keys for `/api/v1`, held by the person (`agent_id` null) or one of
@@ -50,10 +52,17 @@ It has two sides:
 - **listings**: one table for internal and scraped stays; unique on
   `(source_id, external_id)`; `market` bucket (e.g. `sf-bay-area`) from lat/lng;
   `location_precision` says how exact the coordinates are; source-specific
-  extras go in `attributes` (jsonb), the scraped record in `raw`.
+  extras go in `attributes` (jsonb), the scraped record in `raw`. Internal listings start
+  as `draft` (hidden from search) until the host publishes; `address` is private, and
+  lat/lng are rounded to ~1 km.
 - **listing_photos**, **listing_availability** (date ranges), **external_hosts**.
 - **scrape_runs**: one row per ingest; complete runs mark unseen listings `gone`.
-- **user_source_accounts**, **applications**: for applying on a user's behalf (next phase).
+- **listing_publications**: a host's internal listing copied onto an external network
+  (Trustroots, BeWelcome, ...), with status `queued` / `running` / `needs_user` / `live` /
+  `failed` / `removed`, the live-view URL while a browser session is open, and the public URL.
+- **user_source_accounts**: a user's account on an external network; for hosting,
+  `credential_ref` is their Browserbase context id (saved cookies, so they log in once).
+- **applications**: for applying on a user's behalf (next phase).
 - Planned: messages, notifications.
 
 ## Scraping conventions
@@ -71,13 +80,31 @@ It has two sides:
 - Paginated APIs need a stable sort (TrustedHousesitters: `published desc`),
   otherwise pages overlap and listings get missed.
 
-## Agent tools (planned, AI SDK `tool()`s on `/api/chat`)
-- `listMyPlace`: publish/update the user's listing for given dates
-- `searchStays`: search the internal network plus the external adapters for a city/dates
-- `requestStay`: send a request to an internal host (writes the guest intro, notifies the host)
-- `respondToRequest`: host accepts/declines and replies
-- `scheduleStay`: confirm dates/arrival time
-- `getNotifications` / `getMyRequests`: inbox for both sides
+## Hosting: adding your place (`src/lib/hosting/`)
+- The agent asks only for the location and photos (and suggests which photos to take),
+  writes the listing itself, and shows a preview card. Publishing to AgentBnB waits for the
+  host's OK unless they said to publish right away.
+- Photos go straight from the browser to Vercel Blob (`/api/hosting/photos`, client upload,
+  shrunk to 1600px). The chat route appends the photo URLs as text so the model can pass them on.
+- `networks.ts` lists the external networks with which arrangement each fits (`hosting`,
+  `house_sit`, `exchange`), how easy each is to automate, and site hints for the browser agent.
+- `browser-agent.ts`: one Browserbase session per attempt (Stagehand driven by an AI SDK tool
+  loop), run in `after()` on `/api/hosting/publications` (maxDuration 300). The chat card embeds
+  the live view; the host can take control at any time. Logins, sign-ups, CAPTCHAs and payment go
+  through `askHost`; the agent never types credentials. Out of time → the host taps Continue
+  and a new session resumes on the same saved context.
+- Stagehand must stay in `serverExternalPackages` (it uploads its extension zip from its package).
+- Next: keep publications in sync when the listing changes, and pull requests from external
+  networks into the agent's inbox.
+
+## Agent tools (AI SDK `tool()`s on `/api/chat`)
+- Done: `searchStays`, `getListing`, `getCoverage`; hosting: `saveListingDraft`, `publishListing`,
+  `recommendNetworks`, `addToNetworks`, `getMyListings`.
+- Planned:
+  - `requestStay`: send a request to an internal host (writes the guest intro, notifies the host)
+  - `respondToRequest`: host accepts/declines and replies
+  - `scheduleStay`: confirm dates/arrival time
+  - `getNotifications` / `getMyRequests`: inbox for both sides
 
 ## Design
 - UI follows `DESIGN.md` (Airbnb-inspired tokens and components, from
@@ -93,8 +120,9 @@ It has two sides:
 - Postgres via Drizzle ORM on Neon (`DATABASE_URL`, required everywhere,
   including local dev). Migrations: `pnpm db:generate` / `pnpm db:migrate`.
 - Vercel project: `s4m3rs-projects/agentbnb`. Pull env with `vercel env pull --yes`.
-- Neon (`agentbnb-db`) and Vercel Blob (`agentbnb-photos`) are attached via the
-  Vercel Marketplace / `vercel blob`. Admin endpoints use bearer `INGEST_TOKEN`.
+- Neon (`agentbnb-db`), Vercel Blob (`agentbnb-photos`) and Browserbase
+  (`BROWSERBASE_API_KEY`, `BROWSERBASE_PROJECT_ID`) are attached via the Vercel Marketplace /
+  `vercel blob`. Admin endpoints use bearer `INGEST_TOKEN`.
 - Public API for people and their agents lives under `/api/v1` (register, me, keys), with
   agent-readable docs at `/docs.md`. Errors are `{ error: { code, message } }`; keep
   `/docs.md` in sync when endpoints change.

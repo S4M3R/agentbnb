@@ -16,6 +16,8 @@
   "dependencies": {
     "@ai-sdk/openai": "^4.0.101",
     "@ai-sdk/react": "^4.0.155",
+    "@browserbasehq/sdk": "^2.22.0",
+    "@browserbasehq/stagehand": "^4.3.0",
     "@neondatabase/serverless": "^1.2.0",
     "@vercel/blob": "^2.8.2",
     "ai": "^7.0.151",
