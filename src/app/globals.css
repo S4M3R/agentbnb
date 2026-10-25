@@ -154,6 +154,65 @@
     }
   }
 
+  /* Counters roll to their new value: up when the number grows, down when it shrinks. */
+  --animate-roll-up: roll-up 0.32s cubic-bezier(0.2, 0.8, 0.2, 1);
+  @keyframes roll-up {
+    from {
+      transform: translateY(85%);
+      opacity: 0;
+    }
+  }
+  --animate-roll-down: roll-down 0.32s cubic-bezier(0.2, 0.8, 0.2, 1);
+  @keyframes roll-down {
+    from {
+      transform: translateY(-85%);
+      opacity: 0;
+    }
+  }
+
+  /* The bell rings once when a new notification comes in (swinging from its top). */
+  --animate-bell-swing: bell-swing 0.8s ease-out;
+  @keyframes bell-swing {
+    0%,
+    100% {
+      transform: rotate(0);
+    }
+    15% {
+      transform: rotate(16deg);
+    }
+    35% {
+      transform: rotate(-13deg);
+    }
+    55% {
+      transform: rotate(8deg);
+    }
+    75% {
+      transform: rotate(-4deg);
+    }
+  }
+
+  /* Saving a stay: the heart pops and a ring of dots bursts out of it. */
+  --animate-heart-pop: heart-pop 0.45s var(--ease-spring);
+  @keyframes heart-pop {
+    0% {
+      transform: scale(0.6);
+    }
+    45% {
+      transform: scale(1.25);
+    }
+  }
+  --animate-burst: burst 0.55s cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
+  @keyframes burst {
+    from {
+      transform: rotate(var(--angle)) translateY(-6px) scale(1);
+      opacity: 1;
+    }
+    to {
+      transform: rotate(var(--angle)) translateY(-20px) scale(0.4);
+      opacity: 0;
+    }
+  }
+
   /* Couchbot, the agent: blinks now and then while idle, looks around while it works, and bobs
      gently when it's the centre of the screen (its shadow shrinks as it rises). */
   --animate-couchbot-blink: couchbot-blink 5s ease-in-out infinite;
@@ -188,6 +247,43 @@
     }
     50% {
       transform: translateY(-3px);
+    }
+  }
+
+  /* While Couchbot naps, a z floats up and to the right from the backrest, grows and fades; three run a second apart. */
+  --animate-couchbot-snore: couchbot-snore 3s ease-out infinite;
+  @keyframes couchbot-snore {
+    0% {
+      transform: translate(0, 0) scale(0.55) rotate(-10deg);
+      opacity: 0;
+    }
+    10% {
+      opacity: 1;
+    }
+    75% {
+      opacity: 0.9;
+    }
+    100% {
+      transform: translate(13px, -15px) scale(1) rotate(6deg);
+      opacity: 0;
+    }
+  }
+
+  /* Found something: two happy hops, squashing on the way down. */
+  --animate-couchbot-hop: couchbot-hop 0.7s ease-out 2;
+  @keyframes couchbot-hop {
+    0%,
+    100% {
+      transform: translateY(0) scale(1);
+    }
+    20% {
+      transform: translateY(0) scale(1.05, 0.93);
+    }
+    50% {
+      transform: translateY(-8px) scale(0.97, 1.04);
+    }
+    78% {
+      transform: translateY(0) scale(1.04, 0.95);
     }
   }
 

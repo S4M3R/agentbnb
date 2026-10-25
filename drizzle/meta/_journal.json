@@ -57,6 +57,13 @@
       "when": 1792878793717,
       "tag": "0007_keychain",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1792886287385,
+      "tag": "0008_listing_insights",
+      "breakpoints": true
     }
   ]
 }

@@ -16,12 +16,13 @@ type Initial = {
   avatarUrl: string | null;
   bio: string;
   homeCity: string;
+  email: string;
   languages: string[];
   verified: boolean;
   memberSince: string;
 } | null;
 
-type Fields = { name: string; avatarUrl: string | null; bio: string; homeCity: string; languages: string[] };
+type Fields = { name: string; avatarUrl: string | null; bio: string; homeCity: string; email: string; languages: string[] };
 
 const BIO_MAX = 1000;
 const COMMON_LANGUAGES = ["English", "Spanish", "French", "Portuguese", "German", "Italian"];
@@ -36,6 +37,7 @@ export function ProfileForm({ initial }: { initial: Initial }) {
     avatarUrl: initial?.avatarUrl ?? null,
     bio: initial?.bio ?? "",
     homeCity: initial?.homeCity ?? "",
+    email: initial?.email ?? "",
     languages: initial?.languages ?? [],
   });
   const [saved, setSaved] = useState(JSON.stringify(fields));
@@ -101,7 +103,10 @@ export function ProfileForm({ initial }: { initial: Initial }) {
       setId(result.id);
       window.dispatchEvent(new Event(PROFILE_CHANGED));
       if (langDraft.trim()) addLanguages(langDraft);
-      setSaved(JSON.stringify({ ...fields, languages: dedupe(languages) }));
+      // The server lowercases the email; show it as saved.
+      const email = fields.email.trim().toLowerCase();
+      setFields((f) => ({ ...f, email }));
+      setSaved(JSON.stringify({ ...fields, email, languages: dedupe(languages) }));
       setError(null);
       setJustSaved(true);
     });
@@ -174,6 +179,26 @@ export function ProfileForm({ initial }: { initial: Initial }) {
             autoComplete="address-level2"
             className={`${INPUT} h-14 ${error?.field === "homeCity" ? "border-error" : "border-hairline"}`}
           />
+        </Field>
+
+        <Field label="Email" htmlFor="profile-email" error={error?.field === "email" ? error.message : undefined}>
+          <input
+            id="profile-email"
+            type="email"
+            value={fields.email}
+            onChange={(e) => set("email", e.currentTarget.value)}
+            placeholder="you@example.com"
+            maxLength={254}
+            autoComplete="email"
+            autoCapitalize="none"
+            spellCheck={false}
+            aria-invalid={error?.field === "email"}
+            aria-describedby="profile-email-hint"
+            className={`${INPUT} h-14 ${error?.field === "email" ? "border-error" : "border-hairline"}`}
+          />
+          <p id="profile-email-hint" className="mt-2 text-[13px] text-muted">
+            Private: only you see it. Your agent signs up and logs in on other sites with it, and we email you when hosts reply.
+          </p>
         </Field>
 
         <Field

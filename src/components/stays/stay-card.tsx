@@ -1,7 +1,8 @@
 import { Avatar } from "@/components/ui/avatar";
-import { CheckIcon, HeartIcon, MoonIcon, PinIcon } from "@/components/ui/icons";
+import { CheckIcon, MoonIcon, PinIcon } from "@/components/ui/icons";
 import { SiteIcon } from "@/components/ui/site-name";
 import type { StayCardData } from "./types";
+import { SaveHeart } from "./save-heart";
 
 /** Photo-first stay card: host face on the photo, place and price, then why it fits. Width comes from the parent. */
 export function StayCard({
@@ -21,8 +22,11 @@ export function StayCard({
   onToggleSave?: () => void;
   /** Adds an "Apply now" button under the card. */
   onApply?: () => void;
-  /** Adds an "Add to list" button beside it; with `inList` it reads "Added" and clicking removes the stay. */
-  onAddToList?: () => void;
+  /**
+   * Adds an "Add to list" button beside it; with `inList` it reads "Added" and clicking removes the
+   * stay. Gets the button, so the photo can fly from this card to the list.
+   */
+  onAddToList?: (from: HTMLElement) => void;
   inList?: boolean;
   /** Pointer entering (true) or leaving (false) the card, e.g. to highlight its map pin. */
   onHoverChange?: (hovering: boolean) => void;
@@ -60,10 +64,10 @@ export function StayCard({
           {onAddToList && (
             <button
               type="button"
-              onClick={onAddToList}
+              onClick={(e) => onAddToList(e.currentTarget)}
               aria-pressed={inList}
               aria-label={inList ? `Remove ${stay.title} from your apply list` : `Add ${stay.title} to your apply list`}
-              className={`inline-flex h-9 flex-1 items-center justify-center gap-1.5 rounded-lg border px-3 text-[13px] font-semibold transition-colors ${
+              className={`inline-flex h-9 flex-1 items-center justify-center gap-1.5 rounded-lg border px-3 text-[13px] font-semibold transition-[color,background-color,border-color,transform] active:scale-[0.97] motion-reduce:transition-colors ${
                 inList ? "border-ink bg-surface-soft text-ink" : "border-hairline bg-canvas text-ink hover:border-ink"
               }`}
             >
@@ -80,20 +84,7 @@ export function StayCard({
         </div>
       )}
 
-      {onToggleSave && (
-        <button
-          type="button"
-          onClick={onToggleSave}
-          aria-label={saved ? `Remove ${stay.title} from saved` : `Save ${stay.title}`}
-          aria-pressed={saved}
-          className="absolute right-2 top-2 flex size-10 items-center justify-center rounded-full transition-transform active:scale-90"
-        >
-          <HeartIcon
-            size={24}
-            className={saved ? "fill-rausch text-white" : "fill-black/45 text-white"}
-          />
-        </button>
-      )}
+      {onToggleSave && <SaveHeart title={stay.title} saved={saved} onToggle={onToggleSave} />}
     </article>
   );
 }
@@ -101,7 +92,7 @@ export function StayCard({
 function CardBody({ stay }: { stay: StayCardData }) {
   return (
     <>
-      <span className="relative block aspect-[20/19] w-full overflow-hidden rounded-card bg-surface-strong">
+      <span data-stay-photo className="relative block aspect-[20/19] w-full overflow-hidden rounded-card bg-surface-strong">
         {stay.photo ? (
           // eslint-disable-next-line @next/next/no-img-element -- third-party listing photos
           <img

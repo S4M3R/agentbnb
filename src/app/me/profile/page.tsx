@@ -37,6 +37,7 @@ async function Editor() {
           avatarUrl: profile.avatarUrl,
           bio: profile.bio ?? "",
           homeCity: profile.homeCity ?? "",
+          email: profile.email ?? "",
           languages: profile.languages,
           verified: profile.verified,
           memberSince: profile.memberSince.toISOString(),

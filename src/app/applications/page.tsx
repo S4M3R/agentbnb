@@ -150,7 +150,7 @@ function Empty({ tab }: { tab: TabId }) {
   };
   return (
     <div className="flex flex-col items-center gap-4 rounded-[14px] border border-dashed border-hairline px-6 py-14 text-center">
-      <Couchbot size={72} mood={tab === "active" ? "idle" : "sleepy"} animated={tab === "active"} />
+      <Couchbot size={72} mood="sleepy" animated />
       <p className="max-w-md text-[15px] leading-relaxed text-muted">{copy[tab]}</p>
       {tab === "active" && (
         <Link

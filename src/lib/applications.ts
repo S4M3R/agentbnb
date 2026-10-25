@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, inArray, isNull, lt, ne, notInArray, or, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNotNull, isNull, lt, ne, notInArray, or, sql } from "drizzle-orm";
 import { db, schema } from "@/db";
 import { notify } from "@/lib/notify";
 
@@ -126,11 +126,18 @@ async function overlapping(app: { id: string; userId: string; startDate: string 
   );
 }
 
+/** Unread notifications about applications (the Applications tab's badge; the bell counts all). */
 export async function unreadCount(userId: string) {
   const [row] = await db
     .select({ n: sql<number>`count(*)::int` })
     .from(schema.notifications)
-    .where(and(eq(schema.notifications.userId, userId), isNull(schema.notifications.readAt)));
+    .where(
+      and(
+        eq(schema.notifications.userId, userId),
+        isNull(schema.notifications.readAt),
+        isNotNull(schema.notifications.applicationId),
+      ),
+    );
   return row?.n ?? 0;
 }
 
@@ -309,7 +316,8 @@ export async function setStatus(
   await addEvent(id, "status", opts.actor, message, { ...opts.data, from, to });
   if (row.app.channel === "internal") await mirrorToHostInbox(id, to, opts.actor);
 
-  if (opts.quiet) return;
+  // Still waiting on the guest (the run timed out mid-ask): they already heard. One push per real change.
+  if (opts.quiet || (from === "needs_user" && to === "needs_user")) return;
   const where = row.listingTitle;
   const guest = (title: string, body?: string) =>
     notify(row.app.userId, { title, body, url: path(id), applicationId: id });
@@ -327,9 +335,19 @@ export async function setStatus(
           applicationId: id,
         });
       break;
-    case "needs_user":
-      await guest(`I need you for a moment: ${where}`, message ?? undefined);
+    case "needs_user": {
+      // What the agent is waiting for: a login or email for the Keychain, else something in the browser.
+      const ask = opts.data?.ask as { kind?: string; siteName?: string } | undefined;
+      const site = ask?.siteName ?? row.sourceName;
+      const title =
+        ask?.kind === "credentials"
+          ? `Your ${site} login, please: ${where}`
+          : ask?.kind === "email"
+            ? `Your email, please: ${where}`
+            : `I need you for a moment: ${where}`;
+      await guest(title, message ?? undefined);
       break;
+    }
     case "accepted": {
       const others = await overlapping({ ...row.app });
       await guest(`Accepted! ${where}`, message ?? undefined);

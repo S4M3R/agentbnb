@@ -50,8 +50,8 @@ function Face({ mood }: { mood: CouchbotMood }) {
 
 /**
  * Couchbot, the AgentBnB mark and the agent's face: a puffy armchair, because the couch is the
- * agent. `mood` changes the expression; `animated` adds a blink (idle), a look-around (thinking)
- * or a slow bob, all off under reduced motion. The same drawing lives in `src/app/icon.svg`.
+ * agent. `mood` changes the expression; `animated` adds a blink (idle), a look-around (thinking),
+ * drifting z's (sleepy), two hops (happy) and a slow bob, all off under reduced motion. The same drawing lives in `src/app/icon.svg`.
  */
 export function Couchbot({
   size = 28,
@@ -118,7 +118,15 @@ export function Couchbot({
         filter={`url(#${soft})`}
         className={animated ? "origin-center transform-fill motion-safe:animate-couchbot-shadow" : ""}
       />
-      <g className={animated ? "motion-safe:animate-couchbot-bob" : ""}>
+      <g
+        className={
+          !animated
+            ? ""
+            : mood === "happy"
+              ? "origin-bottom transform-fill motion-safe:animate-couchbot-hop"
+              : "motion-safe:animate-couchbot-bob"
+        }
+      >
         <rect x="17" y="80" width="5" height="9" rx="2.5" fill="#4a0f1f" />
         <rect x="78" y="80" width="5" height="9" rx="2.5" fill="#4a0f1f" />
         {puff(<rect x="21" y="20" width="58" height="40" rx="15" />)}
@@ -135,7 +143,26 @@ export function Couchbot({
           </>,
         )}
       </g>
+      {animated && mood === "sleepy" && <Snores />}
     </svg>
+  );
+}
+
+/** Three z's drifting up from the backrest, one after another, while Couchbot naps. */
+function Snores() {
+  return (
+    <g fill="none" stroke="#a30d36" strokeLinecap="round" strokeLinejoin="round" className="motion-reduce:hidden">
+      {["0s", "1s", "2s"].map((delay) => (
+        <g key={delay} transform="translate(72 21)">
+          <path
+            d="M-3.2 -3.4H3.2L-3.2 3.4H3.2"
+            strokeWidth="2.4"
+            className="origin-center opacity-0 transform-fill motion-safe:animate-couchbot-snore"
+            style={{ animationDelay: delay }}
+          />
+        </g>
+      ))}
+    </g>
   );
 }
 

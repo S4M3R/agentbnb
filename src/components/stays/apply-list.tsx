@@ -4,6 +4,7 @@ import { useEffect, type ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import { CloseIcon, PinIcon, SuitcaseIcon } from "@/components/ui/icons";
 import { SiteName } from "@/components/ui/site-name";
+import { RollingNumber } from "@/components/ui/rolling-number";
 
 export type ApplyListRow = {
   id: string;
@@ -41,10 +42,16 @@ export function ApplyList({
 }) {
   const n = items.length;
   return (
-    <div className="flex h-full min-h-0 flex-col bg-canvas">
+    <div data-apply-list className="flex h-full min-h-0 flex-col bg-canvas">
       <header className="flex h-16 shrink-0 items-center justify-between gap-3 pl-6 pr-3">
         <h2 className="truncate text-[17px] font-semibold">
-          Your apply list{n > 0 && <span className="font-normal text-muted"> · {n}</span>}
+          Your apply list
+          {n > 0 && (
+            <span className="font-normal text-muted">
+              {" · "}
+              <RollingNumber value={n} />
+            </span>
+          )}
         </h2>
         {onClose && (
           <button
@@ -71,9 +78,13 @@ export function ApplyList({
           {items.map((item) => (
             <li
               key={item.id}
+              data-apply-row
               className="group flex items-center gap-3 rounded-xl p-3 transition-colors hover:bg-surface-soft motion-safe:animate-rise"
             >
-              <span className="flex size-14 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-surface-strong text-muted">
+              <span
+                data-apply-thumb={item.id}
+                className="flex size-14 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-surface-strong text-muted"
+              >
                 {item.photo ? (
                   // eslint-disable-next-line @next/next/no-img-element -- third-party listing photos
                   <img src={item.photo} alt="" className="size-full object-cover" />
@@ -92,7 +103,7 @@ export function ApplyList({
               </span>
               <button
                 type="button"
-                onClick={() => onRemove(item.id)}
+                onClick={(e) => collapse([e.currentTarget.closest("li")], () => onRemove(item.id))}
                 aria-label={`Remove ${item.title}`}
                 title="Remove"
                 className="flex size-9 shrink-0 items-center justify-center rounded-full text-muted transition-colors hover:bg-surface-strong hover:text-ink"
@@ -109,7 +120,12 @@ export function ApplyList({
 
       {n > 0 && (
         <footer className="flex shrink-0 items-center gap-3 border-t border-hairline-soft px-6 py-3.5 pb-[max(0.875rem,env(safe-area-inset-bottom))]">
-          <Button variant="ghost" size="sm" onClick={onClear} className="-ml-3 underline underline-offset-2">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={(e) => collapse([...(e.currentTarget.closest("[data-apply-list]")?.querySelectorAll("li[data-apply-row]") ?? [])], onClear)}
+            className="-ml-3 underline underline-offset-2"
+          >
             Clear
           </Button>
           <Button size="sm" onClick={onApply} disabled={disabled} className="ml-auto">
@@ -119,6 +135,27 @@ export function ApplyList({
       )}
     </div>
   );
+}
+
+/**
+ * Slides rows out to the right while closing the gap they leave, then calls `done` (which removes
+ * them for real). Straight to `done` under reduced motion.
+ */
+function collapse(rows: (Element | null)[], done: () => void) {
+  const els = rows.filter((r): r is HTMLElement => r instanceof HTMLElement);
+  if (!els.length || window.matchMedia("(prefers-reduced-motion: reduce)").matches) return done();
+  const runs = els.map((el, i) => {
+    el.style.overflow = "hidden";
+    return el.animate(
+      [
+        { height: `${el.offsetHeight}px`, opacity: 1, transform: "translateX(0)" },
+        { height: `${el.offsetHeight}px`, opacity: 0, transform: "translateX(28px)", offset: 0.5 },
+        { height: "0px", opacity: 0, transform: "translateX(28px)", paddingTop: "0px", paddingBottom: "0px" },
+      ],
+      { duration: 320, delay: i * 40, easing: "cubic-bezier(0.2, 0.8, 0.2, 1)", fill: "forwards" },
+    );
+  });
+  Promise.all(runs.map((a) => a.finished)).then(done, done);
 }
 
 /** The list docked on the right of the chat, from `lg` up. */
@@ -162,11 +199,14 @@ export function ApplyListPill({ count, onClick, className = "" }: { count: numbe
     <button
       type="button"
       onClick={onClick}
+      data-apply-list-pill
       className={`inline-flex h-10 items-center gap-2 rounded-full bg-ink pl-3.5 pr-4 text-sm font-semibold text-white shadow-float transition-transform hover:scale-[1.02] active:scale-[0.98] motion-safe:animate-rise motion-reduce:transition-none ${className}`}
     >
       <SuitcaseIcon size={16} />
       Apply list
-      <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-rausch px-1.5 text-xs tabular-nums">{count}</span>
+      <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-rausch px-1.5 text-xs tabular-nums">
+        <RollingNumber value={count} />
+      </span>
     </button>
   );
 }

@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import { Couchbot, type CouchbotMood } from "@/components/brand/logo";
+import { SiteIcon } from "@/components/ui/site-name";
 import { RichText } from "./rich-text";
 
 /** The guest's turn: their text in a bubble, with any photos they attached above it. */
@@ -18,6 +19,67 @@ export function UserMessage({ children, photos = [] }: { children: ReactNode; ph
         {children}
       </div>
     </div>
+  );
+}
+
+type ApplyPlace = { id: string; title: string; photo?: string | null; site?: string | null };
+
+/** The guest's "apply to these places" turn, drawn as small cards instead of the prompt the agent reads. */
+export function ApplyRequest({ places }: { places: ApplyPlace[] }) {
+  const one = places.length === 1;
+  const shown = places.slice(0, 5);
+  const names = places.slice(0, 2).map((p) => p.title);
+  return (
+    <div className="flex flex-col items-end">
+      <div className="flex max-w-[85%] flex-col gap-2.5 rounded-3xl bg-surface-strong px-4 py-3 sm:max-w-[78%] sm:px-[18px]">
+        <div className="text-[15px] font-semibold leading-5 sm:text-base">
+          {one ? "Apply to this place" : `Apply to ${places.length} places`}
+        </div>
+        {one ? (
+          <div className="flex items-center gap-3">
+            <PlaceThumb place={places[0]} />
+            <span className="line-clamp-2 min-w-0 text-[14px] leading-5 text-body">{places[0].title}</span>
+          </div>
+        ) : (
+          <>
+            <ul className="flex flex-wrap gap-2" aria-label="Places">
+              {shown.map((p) => (
+                <li key={p.id} title={p.title}>
+                  <PlaceThumb place={p} />
+                </li>
+              ))}
+              {places.length > shown.length && (
+                <li className="flex size-14 items-center justify-center rounded-xl bg-canvas text-sm font-semibold text-muted">
+                  +{places.length - shown.length}
+                </li>
+              )}
+            </ul>
+            <p className="line-clamp-2 text-[13px] leading-[18px] text-muted">
+              {names.join(", ")}
+              {places.length > names.length && ` and ${places.length - names.length} more`}
+            </p>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function PlaceThumb({ place }: { place: ApplyPlace }) {
+  return (
+    <span className="relative block size-14 shrink-0">
+      {place.photo ? (
+        // eslint-disable-next-line @next/next/no-img-element -- listing photos come from many hosts
+        <img src={place.photo} alt="" className="size-full rounded-xl object-cover" />
+      ) : (
+        <span className="block size-full rounded-xl bg-canvas" />
+      )}
+      {place.site && (
+        <span className="absolute -bottom-1 -right-1 flex size-5 items-center justify-center rounded-full bg-canvas shadow-[0_0_0_1px_rgb(0_0_0/0.06)]">
+          <SiteIcon site={place.site} size={13} />
+        </span>
+      )}
+    </span>
   );
 }
 

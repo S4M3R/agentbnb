@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect } from "react";
+import { NOTIFICATIONS_READ } from "@/components/notifications/use-notifications";
+import { NOTIFICATIONS_CHANGED } from "@/components/notifications/use-push";
 import { useCachedJson, writeCachedJson } from "@/lib/cached-json";
 
 export type NavTab = {
@@ -42,7 +44,7 @@ export function isActive(href: string, pathname: string | null | undefined) {
   return [href, ...(SECTION_PATHS[href] ?? [])].some((p) => pathname === p || pathname.startsWith(`${p}/`));
 }
 
-/** Unread application updates, refreshed every 30s while the tab is visible. */
+/** Unread application updates, refreshed every 30s while the tab is visible and when the bell changes. */
 export function useUnreadApplications() {
   // The last count shows straight away (see cached-json); the fetch refreshes it.
   const unread = useCachedJson<number>("abnb:unread") ?? 0;
@@ -54,9 +56,14 @@ export function useUnreadApplications() {
     }
     load();
     const timer = setInterval(() => document.visibilityState === "visible" && load(), 30_000);
+    // Reading notifications in the bell (or a push arriving) changes the count.
+    window.addEventListener(NOTIFICATIONS_READ, load);
+    window.addEventListener(NOTIFICATIONS_CHANGED, load);
     return () => {
       stopped = true;
       clearInterval(timer);
+      window.removeEventListener(NOTIFICATIONS_READ, load);
+      window.removeEventListener(NOTIFICATIONS_CHANGED, load);
     };
   }, []);
   return unread;

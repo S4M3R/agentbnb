@@ -12,7 +12,7 @@ import {
   withdrawApplications,
 } from "../actions";
 import { STATUS, TRANSIENT, TYPE_LABEL, formatRange, hostEventText, hostStatus, statusClass, timeAgo } from "../status";
-import { ActionButton, CopyButton, KickRuns, LiveRefresh, MarkRead, ReplyBox, ScheduleForm } from "../ui";
+import { ActionButton, CopyButton, KickRuns, LiveRefresh, MarkRead, ReplyBox, ScheduleForm, WatchBrowser } from "../ui";
 import { NeedsUserBlock } from "../../me/keychain/forms";
 import { latestAsk } from "@/lib/access";
 import { PageShell } from "@/components/shell/page-shell";
@@ -92,8 +92,15 @@ async function Application({ params }: { params: PageProps<"/applications/[id]">
         </div>
       </section>
 
-      {isGuest && app.statusMessage && app.status !== "needs_user" && (
-        <p className="rounded-[14px] bg-surface-soft px-4 py-3 text-sm leading-relaxed text-body">{app.statusMessage}</p>
+      {/* While the agent works on its own, watch its browser (or see it getting ready); else the status line. */}
+      {isGuest && app.status !== "needs_user" && (app.liveViewUrl || app.status === "queued" || app.status === "sending") ? (
+        <WatchBrowser url={app.liveViewUrl} site={app.source.name} message={app.statusMessage} />
+      ) : (
+        isGuest &&
+        app.statusMessage &&
+        app.status !== "needs_user" && (
+          <p className="rounded-[14px] bg-surface-soft px-4 py-3 text-sm leading-relaxed text-body">{app.statusMessage}</p>
+        )
       )}
 
       {/* Waiting for a login or email: the secure form; otherwise the live browser or Continue. */}

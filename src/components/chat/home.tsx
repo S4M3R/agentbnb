@@ -2,10 +2,12 @@ import Link from "next/link";
 import type { ReactNode } from "react";
 import { Couchbot } from "@/components/brand/logo";
 import { ChevronRightIcon } from "@/components/ui/icons";
+import { ReservedSlot } from "./reserved-slot";
 
 /**
- * The empty chat: Couchbot and its greeting, composer, then optional slots for a trip in progress, what needs
- * the member's attention, recent conversations, starter prompts and a banner underneath. Centered from `sm`
+ * The empty chat: Couchbot and its greeting, composer, then optional slots for a one-off notice (turning
+ * notifications on), a trip in progress, what needs the member's attention, recent conversations,
+ * starter prompts and a banner underneath. Centered from `sm`
  * up; on a phone the composer docks to the bottom of the screen and the sections scroll above it.
  */
 export function ChatHome({
@@ -13,6 +15,7 @@ export function ChatHome({
   subtitle,
   activity,
   composer,
+  notice,
   resume,
   attention,
   recent,
@@ -23,6 +26,7 @@ export function ChatHome({
   subtitle?: string;
   activity?: ReactNode;
   composer: ReactNode;
+  notice?: ReactNode;
   resume?: ReactNode;
   attention?: ReactNode;
   recent?: ReactNode;
@@ -31,7 +35,10 @@ export function ChatHome({
 }) {
   return (
     <div className="mx-auto flex w-full max-w-[820px] flex-col px-5 pb-36 pt-4 sm:items-center sm:px-8 sm:pb-10 sm:pt-11">
-      {activity}
+      {/* Browser-only sections sit in ReservedSlots so they don't push the page down after load. */}
+      <ReservedSlot name="activity" className="flex flex-col sm:items-center">
+        {activity || null}
+      </ReservedSlot>
       {/* Couchbot asks the question: the greeting is the agent talking */}
       <Couchbot mood="idle" animated size={84} className="-mb-1 mt-4 size-[68px] sm:mt-6 sm:size-[84px]" />
       <h1 className="mt-3 font-brand text-[34px] font-extrabold leading-[38px] tracking-[-0.04em] sm:text-center sm:text-[44px] sm:leading-[50px]">
@@ -41,9 +48,16 @@ export function ChatHome({
       <div className="w-full max-sm:fixed max-sm:inset-x-0 max-sm:bottom-0 max-sm:z-10 max-sm:bg-canvas max-sm:before:pointer-events-none max-sm:before:absolute max-sm:before:inset-x-0 max-sm:before:bottom-full max-sm:before:h-8 max-sm:before:bg-linear-to-t max-sm:before:from-canvas max-sm:before:to-transparent max-sm:px-3 max-sm:pb-[max(0.75rem,env(safe-area-inset-bottom))] max-sm:pt-2 sm:mt-[30px]">
         {composer}
       </div>
+      <ReservedSlot name="notice" className="has-[>*]:pt-5 sm:has-[>*]:pt-7">
+        {notice || null}
+      </ReservedSlot>
       {resume && <div className="mt-5 w-full sm:mt-7">{resume}</div>}
-      {attention && <div className="mt-6 w-full empty:hidden sm:mt-8">{attention}</div>}
-      {recent && <div className="mt-6 w-full empty:hidden sm:mt-8">{recent}</div>}
+      <ReservedSlot name="attention" className="has-[>*]:pt-6 sm:has-[>*]:pt-8">
+        {attention || null}
+      </ReservedSlot>
+      <ReservedSlot name="recent" className="has-[>*]:pt-6 sm:has-[>*]:pt-8">
+        {recent || null}
+      </ReservedSlot>
       {starters && <div className="mt-[26px] w-full sm:mt-[30px]">{starters}</div>}
       {banner && <div className="mt-7 w-full sm:mt-10">{banner}</div>}
     </div>

@@ -1,0 +1,1369 @@
+{
+  "asOf": "2026-10-24",
+  "notes": "Each query: what the user says, the searchStays params the chat agent would plausibly pass (limit is forced to 20 by the runner), an intent the judge grades against, and pool hints used only to gather extra candidates for judging (never by a search function). Dates are absolute and assume today is Saturday 2026-10-24.",
+  "queries": [
+    {
+      "id": "couch-oakland-weekend",
+      "query": "I just got to Oakland and need a couch this weekend",
+      "params": {
+        "location": "Oakland",
+        "startDate": "2026-10-24",
+        "endDate": "2026-10-26",
+        "types": [
+          "couch"
+        ]
+      },
+      "intent": "A free or very cheap short stay in or right next to Oakland for Oct 24-26: a couch, spare room, house sit starting now, or a cheap nightly room/hostel bed. Monthly leases and stays far from Oakland are not useful.",
+      "tags": [
+        "couch",
+        "east-bay",
+        "dates",
+        "budget"
+      ],
+      "pool": {
+        "near": {
+          "lat": 37.8044,
+          "lng": -122.2712,
+          "km": 12
+        },
+        "terms": [
+          "couch",
+          "spare room",
+          "guest room",
+          "night",
+          "short stay",
+          "free",
+          "weekly",
+          "nightly",
+          "hostel",
+          "house sit"
+        ]
+      }
+    },
+    {
+      "id": "free-sf-tonight",
+      "query": "Anything free in San Francisco tonight? I'm broke",
+      "params": {
+        "location": "San Francisco",
+        "startDate": "2026-10-24",
+        "endDate": "2026-10-25"
+      },
+      "intent": "A free (or near-free: house sit, work exchange, couch) place to sleep in San Francisco starting tonight. Paid rentals and monthly leases are not relevant; future-dated sits are marginal.",
+      "tags": [
+        "couch",
+        "sf",
+        "dates",
+        "budget"
+      ],
+      "pool": {
+        "near": {
+          "lat": 37.7749,
+          "lng": -122.4194,
+          "km": 10
+        },
+        "terms": [
+          "free",
+          "couch",
+          "house sit",
+          "volunteer",
+          "exchange",
+          "tonight"
+        ]
+      }
+    },
+    {
+      "id": "couch-berkeley-conference",
+      "query": "Visiting Berkeley for a conference next week, a couch or cheap room near campus would be perfect",
+      "params": {
+        "location": "Berkeley",
+        "startDate": "2026-10-27",
+        "endDate": "2026-10-31"
+      },
+      "intent": "A cheap short stay (couch, room by the night or week, hostel, house sit) in Berkeley near UC Berkeley for Oct 27-31. Long leases, expensive whole apartments or places far from Berkeley are poor fits.",
+      "tags": [
+        "couch",
+        "east-bay",
+        "dates",
+        "budget"
+      ],
+      "pool": {
+        "near": {
+          "lat": 37.8715,
+          "lng": -122.273,
+          "km": 6
+        },
+        "terms": [
+          "campus",
+          "UC Berkeley",
+          "couch",
+          "room",
+          "short term",
+          "week"
+        ]
+      }
+    },
+    {
+      "id": "esperanto-hosts",
+      "query": "I speak Esperanto, are there any hosts in California?",
+      "params": {
+        "location": "California",
+        "types": [
+          "couch"
+        ]
+      },
+      "intent": "Hosts in California who speak Esperanto or welcome Esperanto speakers. Pasporta Servo (the Esperanto hosting network) is hidden from search on purpose, so there may legitimately be nothing; ordinary listings that don't mention Esperanto are not relevant.",
+      "tags": [
+        "couch",
+        "california",
+        "language",
+        "out-of-coverage"
+      ],
+      "pool": {
+        "region": "CA",
+        "terms": [
+          "Esperanto",
+          "Pasporta Servo"
+        ]
+      }
+    },
+    {
+      "id": "cat-sit-sf-december",
+      "query": "cat sit in SF in December",
+      "params": {
+        "location": "San Francisco",
+        "startDate": "2026-12-01",
+        "endDate": "2026-12-31",
+        "types": [
+          "house_sit"
+        ],
+        "animals": [
+          "cat"
+        ]
+      },
+      "intent": "A house sit in San Francisco caring for one or more cats, with dates in December 2026. Dog-only sits are marginal; sits outside SF or outside December are marginal at best.",
+      "tags": [
+        "house_sit",
+        "sf",
+        "pets",
+        "dates"
+      ],
+      "pool": {
+        "near": {
+          "lat": 37.7749,
+          "lng": -122.4194,
+          "km": 10
+        },
+        "types": [
+          "house_sit"
+        ],
+        "terms": [
+          "cat",
+          "cats",
+          "kitten",
+          "feline"
+        ]
+      }
+    },
+    {
+      "id": "dog-sit-marin",
+      "query": "I love dogs, any dog sitting gigs in Marin?",
+      "params": {
+        "location": "Marin",
+        "types": [
+          "house_sit"
+        ],
+        "animals": [
+          "dog"
+        ]
+      },
+      "intent": "House sits in Marin County (Mill Valley, San Rafael, Novato, Sausalito, Fairfax, Point Reyes, ...) caring for dogs, upcoming dates.",
+      "tags": [
+        "house_sit",
+        "marin",
+        "pets"
+      ],
+      "pool": {
+        "near": {
+          "lat": 38.0,
+          "lng": -122.6,
+          "km": 25
+        },
+        "types": [
+          "house_sit"
+        ],
+        "terms": [
+          "dog",
+          "dogs",
+          "puppy",
+          "walks"
+        ]
+      }
+    },
+    {
+      "id": "housesit-no-pets",
+      "query": "Any house sits in the Bay Area with no pets? I'm allergic",
+      "params": {
+        "location": "SF Bay Area",
+        "types": [
+          "house_sit"
+        ],
+        "noPets": true
+      },
+      "intent": "House sits in the SF Bay Area where there are no animals to care for (just the home, plants, mail). Any sit with cats, dogs or other animals is not relevant.",
+      "tags": [
+        "house_sit",
+        "bay-area",
+        "pets",
+        "negative-filter"
+      ],
+      "pool": {
+        "market": "sf-bay-area",
+        "types": [
+          "house_sit"
+        ],
+        "terms": [
+          "no pets",
+          "plants",
+          "garden",
+          "home only",
+          "mail"
+        ]
+      }
+    },
+    {
+      "id": "housesit-thanksgiving-eastbay",
+      "query": "Need a house sit over Thanksgiving in the East Bay",
+      "params": {
+        "location": "East Bay",
+        "startDate": "2026-11-25",
+        "endDate": "2026-11-29",
+        "types": [
+          "house_sit"
+        ]
+      },
+      "intent": "A house sit in the East Bay (Oakland, Berkeley, Alameda, El Cerrito, Richmond, Walnut Creek, Hayward, ...) covering Thanksgiving, roughly Nov 25-29 2026.",
+      "tags": [
+        "house_sit",
+        "east-bay",
+        "dates",
+        "region-name"
+      ],
+      "pool": {
+        "near": {
+          "lat": 37.82,
+          "lng": -122.2,
+          "km": 30
+        },
+        "types": [
+          "house_sit"
+        ],
+        "terms": [
+          "Thanksgiving",
+          "November",
+          "holiday"
+        ]
+      }
+    },
+    {
+      "id": "horse-sit-california",
+      "query": "I grew up with horses. Any house sits with horses or farm animals in California?",
+      "params": {
+        "location": "California",
+        "types": [
+          "house_sit"
+        ],
+        "animals": [
+          "horse"
+        ]
+      },
+      "intent": "House sits (or farm stays) in California where the sitter cares for horses, or other farm animals (goats, chickens, livestock). Sits with only cats/dogs are marginal.",
+      "tags": [
+        "house_sit",
+        "california",
+        "pets",
+        "animals"
+      ],
+      "pool": {
+        "region": "CA",
+        "terms": [
+          "horse",
+          "horses",
+          "farm animals",
+          "goats",
+          "chickens",
+          "livestock",
+          "barn"
+        ]
+      }
+    },
+    {
+      "id": "long-housesit-january",
+      "query": "Looking for a long house sit, a month or more, anywhere in the Bay Area, starting in January",
+      "params": {
+        "location": "SF Bay Area",
+        "startDate": "2027-01-01",
+        "endDate": "2027-01-31",
+        "types": [
+          "house_sit"
+        ]
+      },
+      "intent": "A Bay Area house sit lasting about a month or longer that starts in (or covers) January 2027. Short sits of a few days are marginal.",
+      "tags": [
+        "house_sit",
+        "bay-area",
+        "dates",
+        "duration"
+      ],
+      "pool": {
+        "market": "sf-bay-area",
+        "types": [
+          "house_sit"
+        ],
+        "terms": [
+          "month",
+          "long term",
+          "weeks",
+          "January",
+          "winter"
+        ]
+      }
+    },
+    {
+      "id": "petsit-berkeley-november",
+      "query": "Pet sitting gig in Berkeley or Oakland for a couple of weeks in November?",
+      "params": {
+        "location": "Berkeley",
+        "radiusKm": 10,
+        "startDate": "2026-11-01",
+        "endDate": "2026-11-30",
+        "types": [
+          "house_sit"
+        ]
+      },
+      "intent": "A house sit with pets in Berkeley, Oakland or neighboring East Bay towns, with dates in November 2026, ideally 1-3 weeks.",
+      "tags": [
+        "house_sit",
+        "east-bay",
+        "pets",
+        "dates",
+        "radius"
+      ],
+      "pool": {
+        "near": {
+          "lat": 37.84,
+          "lng": -122.27,
+          "km": 12
+        },
+        "types": [
+          "house_sit"
+        ],
+        "terms": [
+          "dog",
+          "cat",
+          "pets",
+          "November"
+        ]
+      }
+    },
+    {
+      "id": "farm-work-california",
+      "query": "farm work exchange in California",
+      "params": {
+        "location": "California",
+        "types": [
+          "farm_stay",
+          "work_exchange"
+        ],
+        "keywords": "farm"
+      },
+      "intent": "Work exchange or WWOOF-style farm stays in California where the guest helps on a farm (crops, animals, orchard, ranch) for room and board.",
+      "tags": [
+        "work_exchange",
+        "farm",
+        "california",
+        "skills"
+      ],
+      "pool": {
+        "region": "CA",
+        "terms": [
+          "farm",
+          "ranch",
+          "orchard",
+          "harvest",
+          "organic",
+          "WWOOF",
+          "homestead"
+        ]
+      }
+    },
+    {
+      "id": "gardening-sonoma",
+      "query": "I'm good at gardening, any work exchange in Sonoma?",
+      "params": {
+        "location": "Sonoma",
+        "types": [
+          "work_exchange",
+          "farm_stay"
+        ],
+        "keywords": "garden"
+      },
+      "intent": "A work exchange or farm stay in Sonoma County (Sonoma, Santa Rosa, Petaluma, Sebastopol, Healdsburg, ...) involving gardening, landscaping or growing food.",
+      "tags": [
+        "work_exchange",
+        "farm",
+        "sonoma",
+        "skills"
+      ],
+      "pool": {
+        "near": {
+          "lat": 38.4,
+          "lng": -122.75,
+          "km": 40
+        },
+        "terms": [
+          "garden",
+          "gardening",
+          "landscaping",
+          "vegetables",
+          "permaculture",
+          "orchard",
+          "weeding"
+        ]
+      }
+    },
+    {
+      "id": "construction-carpenter",
+      "query": "I'm a carpenter, I can help with construction or building projects in exchange for a bed",
+      "params": {
+        "location": "California",
+        "types": [
+          "work_exchange",
+          "farm_stay"
+        ],
+        "keywords": "construction"
+      },
+      "intent": "California work exchanges or farm stays that need building, carpentry, construction, renovation or handyman help.",
+      "tags": [
+        "work_exchange",
+        "california",
+        "skills"
+      ],
+      "pool": {
+        "region": "CA",
+        "terms": [
+          "construction",
+          "carpentry",
+          "carpenter",
+          "building",
+          "renovation",
+          "handyman",
+          "woodwork",
+          "repairs",
+          "build"
+        ]
+      }
+    },
+    {
+      "id": "childcare-exchange",
+      "query": "I'm great with kids. Any work exchange helping a family with childcare?",
+      "params": {
+        "location": "California",
+        "types": [
+          "work_exchange"
+        ],
+        "keywords": "children"
+      },
+      "intent": "California work exchanges where the guest helps a family with babysitting, childcare, au pair or homeschooling.",
+      "tags": [
+        "work_exchange",
+        "california",
+        "skills",
+        "kids"
+      ],
+      "pool": {
+        "region": "CA",
+        "terms": [
+          "childcare",
+          "babysitting",
+          "kids",
+          "children",
+          "au pair",
+          "family",
+          "homeschool",
+          "nanny"
+        ]
+      }
+    },
+    {
+      "id": "volunteer-animals",
+      "query": "I want to volunteer with animals, goats, chickens, horses, that kind of thing",
+      "params": {
+        "location": "California",
+        "types": [
+          "work_exchange",
+          "farm_stay"
+        ],
+        "keywords": "animals"
+      },
+      "intent": "California work exchanges or farm stays where the main work is caring for animals: livestock, goats, chickens, horses, an animal sanctuary or rescue.",
+      "tags": [
+        "work_exchange",
+        "farm",
+        "california",
+        "animals",
+        "skills"
+      ],
+      "pool": {
+        "region": "CA",
+        "terms": [
+          "animals",
+          "goats",
+          "chickens",
+          "horses",
+          "livestock",
+          "sanctuary",
+          "animal care",
+          "rescue"
+        ]
+      }
+    },
+    {
+      "id": "hostel-work-sf",
+      "query": "work at a hostel in exchange for a bed in San Francisco",
+      "params": {
+        "location": "San Francisco",
+        "types": [
+          "work_exchange"
+        ],
+        "keywords": "hostel"
+      },
+      "intent": "A work exchange at a hostel (reception, housekeeping, events) in San Francisco or the inner Bay Area in exchange for a free bed.",
+      "tags": [
+        "work_exchange",
+        "sf",
+        "skills"
+      ],
+      "pool": {
+        "near": {
+          "lat": 37.7749,
+          "lng": -122.4194,
+          "km": 15
+        },
+        "terms": [
+          "hostel",
+          "reception",
+          "front desk",
+          "housekeeping",
+          "volunteer"
+        ]
+      }
+    },
+    {
+      "id": "social-media-exchange",
+      "query": "I do photography and social media, I'd love to trade those skills for a stay somewhere on the coast",
+      "params": {
+        "location": "California",
+        "types": [
+          "work_exchange"
+        ],
+        "keywords": "social media"
+      },
+      "intent": "California work exchanges asking for photography, video, content creation, marketing or social media help, ideally near the coast.",
+      "tags": [
+        "work_exchange",
+        "california",
+        "skills",
+        "vibe"
+      ],
+      "pool": {
+        "region": "CA",
+        "terms": [
+          "social media",
+          "photography",
+          "photographer",
+          "video",
+          "content creator",
+          "marketing",
+          "instagram"
+        ]
+      }
+    },
+    {
+      "id": "yoga-retreat-exchange",
+      "query": "Volunteer at a yoga or meditation retreat in Northern California",
+      "params": {
+        "location": "California",
+        "types": [
+          "work_exchange",
+          "farm_stay"
+        ],
+        "keywords": "yoga"
+      },
+      "intent": "Work exchanges at yoga, meditation, wellness or spiritual retreat centers in Northern California (north of roughly Santa Barbara).",
+      "tags": [
+        "work_exchange",
+        "california",
+        "vibe"
+      ],
+      "pool": {
+        "region": "CA",
+        "terms": [
+          "yoga",
+          "meditation",
+          "retreat",
+          "ashram",
+          "wellness",
+          "spiritual",
+          "mindfulness"
+        ]
+      }
+    },
+    {
+      "id": "surf-santa-cruz",
+      "query": "Somewhere near the beach around Santa Cruz, I surf",
+      "params": {
+        "location": "Santa Cruz",
+        "keywords": "surf"
+      },
+      "intent": "Affordable stays (any type) near the beach in or around Santa Cruz (Capitola, Aptos, Live Oak, Davenport); surf access is a plus.",
+      "tags": [
+        "vibe",
+        "santa-cruz",
+        "beach"
+      ],
+      "pool": {
+        "near": {
+          "lat": 36.97,
+          "lng": -122.0,
+          "km": 20
+        },
+        "terms": [
+          "beach",
+          "surf",
+          "ocean",
+          "waves",
+          "coast",
+          "walk to beach"
+        ]
+      }
+    },
+    {
+      "id": "homeswap-sf-family",
+      "query": "Home swap in San Francisco for our family with two kids",
+      "params": {
+        "location": "San Francisco",
+        "sources": [
+          "homeexchange",
+          "homelink",
+          "intervac",
+          "kindred"
+        ]
+      },
+      "intent": "A home exchange (HomeExchange, HomeLink, Intervac, Kindred) of a family-friendly home in San Francisco with room for two adults and two kids (2+ bedrooms or kids welcome).",
+      "tags": [
+        "home_swap",
+        "sf",
+        "kids"
+      ],
+      "pool": {
+        "near": {
+          "lat": 37.7749,
+          "lng": -122.4194,
+          "km": 10
+        },
+        "sources": [
+          "homeexchange",
+          "homelink",
+          "intervac",
+          "kindred"
+        ],
+        "terms": [
+          "family",
+          "kids",
+          "children",
+          "bedrooms",
+          "crib",
+          "toys",
+          "child friendly"
+        ]
+      }
+    },
+    {
+      "id": "homeswap-tahoe-ski",
+      "query": "home exchange near Lake Tahoe for ski season",
+      "params": {
+        "location": "Tahoe",
+        "startDate": "2027-01-01",
+        "endDate": "2027-02-28"
+      },
+      "intent": "A home exchange (or failing that any stay) at Lake Tahoe or Truckee, usable in Jan-Feb 2027 for skiing.",
+      "tags": [
+        "home_swap",
+        "tahoe",
+        "dates",
+        "vibe"
+      ],
+      "pool": {
+        "near": {
+          "lat": 39.2,
+          "lng": -120.1,
+          "km": 45
+        },
+        "terms": [
+          "Tahoe",
+          "Truckee",
+          "ski",
+          "skiing",
+          "snow",
+          "mountain"
+        ]
+      }
+    },
+    {
+      "id": "homeswap-oakland-december",
+      "query": "Swap homes in Oakland mid-December",
+      "params": {
+        "location": "Oakland",
+        "startDate": "2026-12-10",
+        "endDate": "2026-12-20",
+        "sources": [
+          "kindred",
+          "homeexchange"
+        ]
+      },
+      "intent": "A home swap of a home in Oakland (or immediate neighbors like Piedmont, Emeryville) available around Dec 10-20 2026.",
+      "tags": [
+        "home_swap",
+        "east-bay",
+        "dates"
+      ],
+      "pool": {
+        "near": {
+          "lat": 37.8044,
+          "lng": -122.2712,
+          "km": 8
+        },
+        "sources": [
+          "kindred",
+          "homeexchange",
+          "homelink",
+          "intervac"
+        ],
+        "terms": [
+          "home",
+          "December",
+          "swap",
+          "exchange"
+        ]
+      }
+    },
+    {
+      "id": "cheap-room-sf",
+      "query": "cheap room in SF, under $1200 a month",
+      "params": {
+        "location": "San Francisco",
+        "types": [
+          "private_room",
+          "shared_room"
+        ]
+      },
+      "intent": "A private or shared room in San Francisco costing at most about $1,200 per month (or equivalent weekly/nightly rate). Rooms above that price are marginal; whole apartments are not relevant.",
+      "tags": [
+        "rental",
+        "sf",
+        "budget"
+      ],
+      "pool": {
+        "near": {
+          "lat": 37.7749,
+          "lng": -122.4194,
+          "km": 9
+        },
+        "types": [
+          "private_room",
+          "shared_room"
+        ],
+        "terms": [
+          "room",
+          "affordable",
+          "cheap",
+          "utilities included",
+          "shared"
+        ]
+      }
+    },
+    {
+      "id": "hostel-sf-tonight",
+      "query": "hostel bed in San Francisco tonight",
+      "params": {
+        "location": "San Francisco",
+        "startDate": "2026-10-24",
+        "endDate": "2026-10-25",
+        "types": [
+          "shared_room"
+        ]
+      },
+      "intent": "A hostel dorm bed or cheap hostel private room in San Francisco bookable for tonight (Oct 24).",
+      "tags": [
+        "hostel",
+        "sf",
+        "dates",
+        "budget"
+      ],
+      "pool": {
+        "near": {
+          "lat": 37.7749,
+          "lng": -122.4194,
+          "km": 10
+        },
+        "terms": [
+          "hostel",
+          "dorm",
+          "bunk",
+          "bed",
+          "backpackers"
+        ]
+      }
+    },
+    {
+      "id": "sublet-mission",
+      "query": "furnished sublet in the Mission for 3 months",
+      "params": {
+        "location": "Mission",
+        "startDate": "2026-11-01",
+        "endDate": "2027-01-31"
+      },
+      "intent": "A furnished room or apartment in San Francisco's Mission District (Mission, Mission Dolores, Valencia St; not Mission Bay, not Mission Viejo) for roughly Nov 2026 - Jan 2027.",
+      "tags": [
+        "rental",
+        "sf",
+        "neighborhood",
+        "dates"
+      ],
+      "pool": {
+        "near": {
+          "lat": 37.7599,
+          "lng": -122.4148,
+          "km": 2.5
+        },
+        "terms": [
+          "Mission",
+          "furnished",
+          "sublet",
+          "Valencia",
+          "Dolores"
+        ]
+      }
+    },
+    {
+      "id": "remote-work-desk",
+      "query": "somewhere quiet with a desk where I can work remotely for a few weeks, Bay Area",
+      "params": {
+        "location": "SF Bay Area",
+        "keywords": "desk"
+      },
+      "intent": "A quiet Bay Area stay suited to remote work for a few weeks: a desk or workspace, good wifi, private room or whole place. Party places, dorms and couches are poor fits.",
+      "tags": [
+        "remote-work",
+        "bay-area",
+        "vibe"
+      ],
+      "pool": {
+        "market": "sf-bay-area",
+        "terms": [
+          "desk",
+          "workspace",
+          "office",
+          "wifi",
+          "remote work",
+          "quiet",
+          "digital nomad",
+          "work from home"
+        ]
+      }
+    },
+    {
+      "id": "founder-host",
+      "query": "I'd love to stay with a host who's a founder or works in tech",
+      "params": {
+        "location": "San Francisco",
+        "keywords": "founder"
+      },
+      "intent": "Stays in San Francisco or the Bay Area where the host or housemates are founders, startup people or tech workers (e.g. founder/tech coliving or a host who says they work in tech).",
+      "tags": [
+        "vibe",
+        "sf",
+        "host"
+      ],
+      "pool": {
+        "market": "sf-bay-area",
+        "terms": [
+          "founder",
+          "startup",
+          "tech",
+          "engineer",
+          "entrepreneur",
+          "coliving",
+          "software"
+        ]
+      }
+    },
+    {
+      "id": "stanford-scholar-winter",
+      "query": "visiting scholar at Stanford, need a furnished place for the winter quarter",
+      "params": {
+        "location": "Palo Alto",
+        "radiusKm": 15,
+        "startDate": "2027-01-05",
+        "endDate": "2027-03-25"
+      },
+      "intent": "A furnished room or apartment within easy reach of Stanford (Palo Alto, Menlo Park, Mountain View, Redwood City, Los Altos) for about Jan-Mar 2027; academic sublets are ideal.",
+      "tags": [
+        "rental",
+        "peninsula",
+        "dates",
+        "radius"
+      ],
+      "pool": {
+        "near": {
+          "lat": 37.43,
+          "lng": -122.16,
+          "km": 15
+        },
+        "terms": [
+          "Stanford",
+          "furnished",
+          "visiting scholar",
+          "academic",
+          "sublet",
+          "quarter"
+        ]
+      }
+    },
+    {
+      "id": "view-oakland-berkeley-hills",
+      "query": "a room with a view of the bay or the city, Oakland or Berkeley hills",
+      "params": {
+        "location": "Oakland",
+        "radiusKm": 15,
+        "keywords": "view"
+      },
+      "intent": "A stay in the Oakland or Berkeley hills (or nearby East Bay) with a view of the bay, the city or the Golden Gate.",
+      "tags": [
+        "vibe",
+        "east-bay",
+        "view",
+        "radius"
+      ],
+      "pool": {
+        "near": {
+          "lat": 37.84,
+          "lng": -122.24,
+          "km": 12
+        },
+        "terms": [
+          "view",
+          "views",
+          "bay view",
+          "hills",
+          "Golden Gate",
+          "panoramic",
+          "skyline"
+        ]
+      }
+    },
+    {
+      "id": "redwoods-weekend",
+      "query": "somewhere in nature, quiet, among redwoods, a weekend getaway from SF",
+      "params": {
+        "location": "SF Bay Area",
+        "startDate": "2026-10-30",
+        "endDate": "2026-11-01",
+        "keywords": "redwood"
+      },
+      "intent": "A quiet stay in nature among redwoods or forest within a couple of hours of SF (Marin, Santa Cruz mountains, Sonoma coast, Big Sur...) for the weekend of Oct 30 - Nov 1.",
+      "tags": [
+        "vibe",
+        "nature",
+        "bay-area",
+        "dates"
+      ],
+      "pool": {
+        "market": "sf-bay-area",
+        "terms": [
+          "redwood",
+          "redwoods",
+          "forest",
+          "nature",
+          "trees",
+          "cabin",
+          "quiet",
+          "hiking"
+        ]
+      }
+    },
+    {
+      "id": "social-travelers-sf",
+      "query": "a social place where I can meet other travelers in SF",
+      "params": {
+        "location": "San Francisco",
+        "keywords": "social"
+      },
+      "intent": "Social stays in San Francisco: hostels, coliving, community houses or volunteering with other travelers. Private, isolated apartments are not relevant.",
+      "tags": [
+        "vibe",
+        "sf",
+        "hostel"
+      ],
+      "pool": {
+        "near": {
+          "lat": 37.7749,
+          "lng": -122.4194,
+          "km": 10
+        },
+        "terms": [
+          "social",
+          "community",
+          "hostel",
+          "coliving",
+          "travelers",
+          "meet people",
+          "events"
+        ]
+      }
+    },
+    {
+      "id": "pet-friendly-oakland",
+      "query": "I'm traveling with my dog and need a pet-friendly room in Oakland for November",
+      "params": {
+        "location": "Oakland",
+        "startDate": "2026-11-01",
+        "endDate": "2026-11-30",
+        "keywords": "pets"
+      },
+      "intent": "A room or place in Oakland for November 2026 that explicitly allows the guest to bring a dog. Places that say no pets are not relevant; unknown pet policy is marginal.",
+      "tags": [
+        "rental",
+        "east-bay",
+        "pets",
+        "dates"
+      ],
+      "pool": {
+        "near": {
+          "lat": 37.8044,
+          "lng": -122.2712,
+          "km": 10
+        },
+        "terms": [
+          "pets allowed",
+          "dog friendly",
+          "pet friendly",
+          "dogs ok",
+          "pets welcome",
+          "dog"
+        ]
+      }
+    },
+    {
+      "id": "weekly-room-san-jose",
+      "query": "need a room in San Jose by the week, starting Monday",
+      "params": {
+        "location": "San Jose",
+        "startDate": "2026-10-26",
+        "endDate": "2026-11-02",
+        "types": [
+          "private_room"
+        ]
+      },
+      "intent": "A private room in San Jose available from Oct 26 that can be rented by the week or for short stays (not a 12-month lease).",
+      "tags": [
+        "rental",
+        "south-bay",
+        "dates",
+        "duration"
+      ],
+      "pool": {
+        "near": {
+          "lat": 37.3382,
+          "lng": -121.8863,
+          "km": 15
+        },
+        "types": [
+          "private_room",
+          "shared_room"
+        ],
+        "terms": [
+          "weekly",
+          "week",
+          "short term",
+          "month to month",
+          "flexible"
+        ]
+      }
+    },
+    {
+      "id": "women-only-sf",
+      "query": "female traveler here, I'd prefer a women-only room or a female host in SF",
+      "params": {
+        "location": "San Francisco",
+        "keywords": "female"
+      },
+      "intent": "Stays in San Francisco that are women-only, female-host, or seeking a female roommate/guest.",
+      "tags": [
+        "host",
+        "sf",
+        "safety"
+      ],
+      "pool": {
+        "near": {
+          "lat": 37.7749,
+          "lng": -122.4194,
+          "km": 10
+        },
+        "terms": [
+          "female",
+          "women",
+          "woman",
+          "girls",
+          "ladies",
+          "female only"
+        ]
+      }
+    },
+    {
+      "id": "cheap-los-angeles",
+      "query": "need a couch or cheap stay in Los Angeles",
+      "params": {
+        "location": "Los Angeles"
+      },
+      "intent": "A free or cheap place to stay in Los Angeles (couch, house sit, work exchange, hostel, cheap room).",
+      "tags": [
+        "couch",
+        "socal",
+        "budget",
+        "location-variant"
+      ],
+      "pool": {
+        "near": {
+          "lat": 34.0522,
+          "lng": -118.2437,
+          "km": 40
+        },
+        "terms": [
+          "Los Angeles",
+          "LA",
+          "hostel",
+          "room",
+          "house sit",
+          "volunteer"
+        ]
+      }
+    },
+    {
+      "id": "work-exchange-san-diego",
+      "query": "work exchange in San Diego",
+      "params": {
+        "location": "San Diego",
+        "types": [
+          "work_exchange"
+        ]
+      },
+      "intent": "Work exchanges (hostel, farm, family, project help) in or near San Diego.",
+      "tags": [
+        "work_exchange",
+        "socal"
+      ],
+      "pool": {
+        "near": {
+          "lat": 32.7157,
+          "lng": -117.1611,
+          "km": 40
+        },
+        "terms": [
+          "San Diego",
+          "volunteer",
+          "hostel",
+          "help"
+        ]
+      }
+    },
+    {
+      "id": "vineyard-napa-sonoma",
+      "query": "I'd like to help on a vineyard or winery in Napa or Sonoma",
+      "params": {
+        "location": "Napa",
+        "radiusKm": 40,
+        "keywords": "vineyard"
+      },
+      "intent": "Work exchanges or farm stays at vineyards, wineries or harvest work in Napa or Sonoma counties.",
+      "tags": [
+        "work_exchange",
+        "farm",
+        "wine-country",
+        "skills",
+        "radius"
+      ],
+      "pool": {
+        "near": {
+          "lat": 38.35,
+          "lng": -122.5,
+          "km": 45
+        },
+        "terms": [
+          "vineyard",
+          "winery",
+          "wine",
+          "grapes",
+          "harvest",
+          "crush"
+        ]
+      }
+    },
+    {
+      "id": "outer-sunset-richmond",
+      "query": "a place in the Outer Sunset or the Richmond District, near Ocean Beach",
+      "params": {
+        "location": "Outer Sunset, San Francisco"
+      },
+      "intent": "Stays in San Francisco's Outer/Inner Sunset or Richmond District (west side, near Ocean Beach / Golden Gate Park). Richmond the East Bay city is not relevant.",
+      "tags": [
+        "sf",
+        "neighborhood",
+        "tricky"
+      ],
+      "pool": {
+        "near": {
+          "lat": 37.765,
+          "lng": -122.488,
+          "km": 3
+        },
+        "terms": [
+          "Sunset",
+          "Richmond District",
+          "Ocean Beach",
+          "Golden Gate Park",
+          "Outer Sunset",
+          "Inner Richmond"
+        ]
+      }
+    },
+    {
+      "id": "dogs-not-cats-sf",
+      "query": "I want a free place in SF, happy to look after a dog, but I'm allergic to cats",
+      "params": {
+        "location": "San Francisco",
+        "types": [
+          "house_sit"
+        ],
+        "animals": [
+          "dog"
+        ]
+      },
+      "intent": "San Francisco house sits with dogs and no cats. Any sit that includes cats is not relevant.",
+      "tags": [
+        "house_sit",
+        "sf",
+        "pets",
+        "negative-filter",
+        "tricky"
+      ],
+      "pool": {
+        "near": {
+          "lat": 37.7749,
+          "lng": -122.4194,
+          "km": 10
+        },
+        "types": [
+          "house_sit"
+        ],
+        "terms": [
+          "dog",
+          "dogs",
+          "no cats"
+        ]
+      }
+    },
+    {
+      "id": "wheelchair-accessible-sf",
+      "query": "I use a wheelchair, need an accessible place in SF",
+      "params": {
+        "location": "San Francisco",
+        "keywords": "wheelchair"
+      },
+      "intent": "San Francisco stays that are wheelchair accessible: step-free entry, elevator, ground floor, accessible bathroom.",
+      "tags": [
+        "accessibility",
+        "sf",
+        "tricky"
+      ],
+      "pool": {
+        "near": {
+          "lat": 37.7749,
+          "lng": -122.4194,
+          "km": 10
+        },
+        "terms": [
+          "wheelchair",
+          "accessible",
+          "elevator",
+          "ground floor",
+          "step free",
+          "ADA",
+          "disabled access"
+        ]
+      }
+    },
+    {
+      "id": "spanish-host-oakland",
+      "query": "looking for a host who speaks Spanish in Oakland",
+      "params": {
+        "location": "Oakland",
+        "keywords": "Spanish"
+      },
+      "intent": "Stays in Oakland (or nearby East Bay) where the host or household speaks Spanish.",
+      "tags": [
+        "language",
+        "east-bay",
+        "host"
+      ],
+      "pool": {
+        "near": {
+          "lat": 37.8044,
+          "lng": -122.2712,
+          "km": 10
+        },
+        "terms": [
+          "Spanish",
+          "español",
+          "habla",
+          "bilingual",
+          "Latino"
+        ]
+      }
+    },
+    {
+      "id": "neg-paris",
+      "query": "a couch in Paris next week",
+      "params": {
+        "location": "Paris",
+        "startDate": "2026-10-26",
+        "endDate": "2026-11-01"
+      },
+      "intent": "A stay in Paris, France. We have essentially no Paris coverage, so nothing should be returned; anything in California is not relevant.",
+      "tags": [
+        "negative",
+        "out-of-coverage"
+      ],
+      "pool": {
+        "near": {
+          "lat": 48.8566,
+          "lng": 2.3522,
+          "km": 50
+        },
+        "terms": [
+          "Paris"
+        ]
+      }
+    }
+  ]
+}

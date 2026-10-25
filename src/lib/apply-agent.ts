@@ -6,6 +6,7 @@ import { addEvent, recordHostMessage, setStatus } from "@/lib/applications";
 import type { NeedsUserAsk } from "@/lib/access";
 import { BrowserAgentError, markConnected, runBrowserTask, type AskResult } from "@/lib/browser-agent";
 import { accessRules, confirmAgentLogin } from "@/lib/browser-access";
+import { notify } from "@/lib/notify";
 
 // The browser agent applying on external sites for the guest. One run does whatever an
 // application needs right now:
@@ -221,7 +222,25 @@ async function run(
     case "gave_up":
       if (submit) await setStatus(id, "failed", { actor: "agent", message: outcome.reason, patch: { error: outcome.reason } });
       else {
-        await addEvent(id, "activity", "agent", `Couldn't check ${site}: ${outcome.reason}`);
+        const note = `Couldn't check ${site}: ${outcome.reason}`;
+        // Logged out of the site (unattended checks can only use a saved login): the guest has to
+        // sign in or save their login. Told once, not on every check that hits the same wall.
+        if (/logged out|log in|sign in/i.test(outcome.reason)) {
+          const [last] = await db
+            .select({ body: events.body })
+            .from(events)
+            .where(and(eq(events.applicationId, id), eq(events.kind, "activity")))
+            .orderBy(sql`${events.createdAt} desc`)
+            .limit(1);
+          if (last?.body !== note)
+            await notify(app.userId, {
+              title: `Sign in to ${site} so I can keep watching: ${row.listing.title ?? "your application"}`,
+              body: `${outcome.reason} Your Keychain can hold the login, so I sign in for you next time.`,
+              url: `/applications/${id}`,
+              applicationId: id,
+            });
+        }
+        await addEvent(id, "activity", "agent", note);
         await db.update(applications).set({ lastCheckedAt: now, nextCheckAt: new Date(now.getTime() + NEXT_CHECK_MS) }).where(eq(applications.id, id));
       }
       break;

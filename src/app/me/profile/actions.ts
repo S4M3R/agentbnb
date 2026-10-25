@@ -1,7 +1,7 @@
 "use server";
 
 import { refresh } from "next/cache";
-import { ProfileInput, updateProfile } from "@/lib/profile";
+import { ProfileError, ProfileInput, updateProfile } from "@/lib/profile";
 import { webSession } from "@/lib/session";
 
 export type SaveProfileResult = { ok: true; id: string } | { ok: false; error: string; field?: string };
@@ -23,6 +23,7 @@ export async function saveProfile(input: unknown): Promise<SaveProfileResult> {
     refresh();
     return { ok: true, id: profile.id };
   } catch (err) {
+    if (err instanceof ProfileError) return { ok: false, error: err.message, field: err.field };
     console.error(err);
     return { ok: false, error: "Couldn't save your profile. Try again." };
   }

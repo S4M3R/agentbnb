@@ -9,7 +9,7 @@ export default function NotFound() {
   return (
     <PageShell>
       <div className="flex flex-col items-center py-16 text-center sm:py-24">
-        <Couchbot size={112} mood="sleepy" />
+        <Couchbot size={112} mood="sleepy" animated />
         <h1 className="mt-5 font-brand text-[34px] font-extrabold leading-tight tracking-[-0.04em] sm:text-[40px]">
           Nobody&apos;s home here
         </h1>

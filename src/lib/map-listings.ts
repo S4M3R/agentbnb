@@ -81,7 +81,7 @@ export async function getMapListings(): Promise<MapListing[]> {
       where listing_id = l.id and kind = 'available' and end_date >= current_date
       order by start_date limit 1
     ) a on true
-    where l.status = 'active' and l.lat is not null and l.lng is not null
+    where l.status = 'active' and s.enabled and l.lat is not null and l.lng is not null
   `);
 
   return spreadStacks(rows).map(({ row, lat, lng, offset }) => ({

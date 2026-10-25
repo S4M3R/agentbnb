@@ -1,8 +1,6 @@
 import { tool } from "ai";
-import { eq } from "drizzle-orm";
 import { z } from "zod";
-import { db, schema } from "@/db";
-import { getMyProfile, profilePath, ProfileInput, updateProfile } from "@/lib/profile";
+import { getMyProfile, profilePath, ProfileError, ProfileInput, updateProfile } from "@/lib/profile";
 import type { WebSession } from "@/lib/session";
 
 // The member's public profile (/people/[id]): the agent reads it and fills it in from the
@@ -28,14 +26,12 @@ function view(p: NonNullable<Awaited<ReturnType<typeof getMyProfile>>>, withEmai
  */
 export function profileTools(session: WebSession, { email: withEmail = true } = {}) {
   const Input = ProfileInput.extend({
-    email: z
-      .email()
-      .optional()
-      .describe(
-        withEmail
-          ? "Private: where we send updates when hosts reply. Never shown."
-          : "Not available here; leave it out.",
-      ),
+    email: ProfileInput.shape.email.describe(
+      withEmail
+        ? "Private: the email their agent signs up and logs in on other sites with, and where we send updates when " +
+            "hosts reply. Never shown. Save it as soon as they give it to you."
+        : "Not available here; leave it out.",
+    ),
   });
 
   return {
@@ -59,18 +55,17 @@ export function profileTools(session: WebSession, { email: withEmail = true } = 
         "attached in this chat, pass its URL as avatarUrl. Email is private.",
       inputSchema: Input,
       execute: async (input) => {
-        const { email, ...fields } = input;
-        if (email && !withEmail) return { error: "Email can't be changed here; the person can do it in AgentBnB." };
-        const user = await session.ensureUser();
-        if (email) {
-          try {
-            await db.update(schema.users).set({ email: email.toLowerCase() }).where(eq(schema.users.id, user.id));
-          } catch {
-            return { error: "That email is already used by another account." };
-          }
+        if (input.email !== undefined && !withEmail) {
+          return { error: "Email can't be changed here; the person can do it in AgentBnB." };
         }
-        const profile = await updateProfile(user.id, fields);
-        return { ok: true, profile: view(profile, withEmail) };
+        const user = await session.ensureUser();
+        try {
+          const profile = await updateProfile(user.id, input);
+          return { ok: true, profile: view(profile, withEmail) };
+        } catch (err) {
+          if (err instanceof ProfileError) return { error: err.message };
+          throw err;
+        }
       },
     }),
   };

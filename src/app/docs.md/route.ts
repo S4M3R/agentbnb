@@ -151,6 +151,7 @@ Everyone who asked to stay at the person's place, from AgentBnB and from the ext
   \`startDate\`/\`endDate\`, \`source\`, \`listing\` and the latest \`check\` (\`{ id, status, verdict, summary }\` or null).
 - \`POST /requests\`: import a request the person got on an external platform, e.g. one you read in their
   Couchsurfing inbox. Importing the same \`source\` + \`externalRef\` again updates it.
+  A new request notifies the host (in AgentBnB, by push and by email); updates don't.
 
 \`\`\`bash
 curl -X POST ${base}/api/v1/requests -H 'authorization: Bearer abnb_...' -H 'content-type: application/json' -d '{

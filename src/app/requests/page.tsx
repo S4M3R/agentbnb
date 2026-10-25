@@ -139,7 +139,7 @@ function CheckBadge({ check }: { check: HostRequest["check"] }) {
 function Empty() {
   return (
     <div className="flex flex-col items-center rounded-[14px] border border-dashed border-hairline px-6 py-14 text-center">
-      <Couchbot size={72} mood="sleepy" className="mb-3" />
+      <Couchbot size={72} mood="sleepy" animated className="mb-3" />
       <p className="text-[20px] font-semibold">No requests yet</p>
       <p className="mx-auto mt-2 max-w-md text-[15px] text-muted">
         When someone asks to stay at your place, on AgentBnB or on Couchsurfing, Trustroots and the rest, the

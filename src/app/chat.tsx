@@ -12,7 +12,7 @@ import { ChatColumn, ComposerDock, Conversation } from "@/components/chat/conver
 import { CalendarCard } from "@/components/calendar/calendar-card";
 import { ConnectAgentBanner } from "@/components/chat/connect-agent";
 import { ChatHome } from "@/components/chat/home";
-import { AssistantMessage, AssistantText, ToolStatus, UserMessage } from "@/components/chat/messages";
+import { ApplyRequest, AssistantMessage, AssistantText, ToolStatus, UserMessage } from "@/components/chat/messages";
 import { RecentChats } from "@/components/chat/recent-chats";
 import { StarterCards, type Starter } from "@/components/chat/starter-cards";
 import { PROFILE_CHANGED } from "@/components/shell/nav";
@@ -20,15 +20,16 @@ import { SidePanel } from "@/components/shell/side-panel";
 import { SiteShell } from "@/components/shell/site-shell";
 import { toApplyListItem, toStayCard, toStayPanel } from "@/components/stays/adapters";
 import { ApplyList, ApplyListDock, ApplyListPill, ApplyListSheet } from "@/components/stays/apply-list";
+import { flyToList } from "@/components/stays/fly-to-list";
 import { TYPE_LABEL } from "@/components/stays/format";
 import { StayLink } from "@/components/stays/stay-link";
-import { LiveSearch } from "@/components/stays/search-progress";
+import { COUCHBOT_FOUND, LiveSearch } from "@/components/stays/search-progress";
 import { StayResults } from "@/components/stays/stay-results";
 import type { StayDetails } from "@/components/stays/types";
 import { Button, ButtonLink } from "@/components/ui/button";
 import { SiteIcon } from "@/components/ui/site-name";
 import { CheckIcon, ExternalIcon, NewChatIcon } from "@/components/ui/icons";
-import type { AgentUIMessage } from "@/lib/agent/tools";
+import type { AgentMessageMetadata, AgentUIMessage } from "@/lib/agent/tools";
 import {
   addToApplyList,
   APPLY_LIST_MAX,
@@ -42,14 +43,18 @@ import {
 } from "@/lib/apply-list";
 import { CONNECTABLE_AGENTS, connectPrompt, HOME_AGENT_TILES } from "@/lib/connect-agent";
 import { useAttention, useChatHistory } from "./chat-history";
+import { HomePushBanner } from "./notifications";
+import { useDictation } from "./use-dictation";
 import { uploadPhoto } from "./photo-upload";
 
 // Cards and panels that only appear once a conversation needs them load on demand, so the home screen
 // hydrates with just the composer and its own sections (the location card alone pulls in MapLibre).
 const StayPanel = dynamic(() => import("@/components/stays/stay-panel").then((m) => m.StayPanel));
+const StayPanelPlaceholder = dynamic(() => import("@/components/stays/stay-panel").then((m) => m.StayPanelPlaceholder));
 const ApplicationCards = dynamic(() => import("./application-cards").then((m) => m.ApplicationCards));
 const ApplicationPanel = dynamic(() => import("./application-panel").then((m) => m.ApplicationPanel));
 const DateRequest = dynamic(() => import("./date-request").then((m) => m.DateRequest));
+const LoginAsk = dynamic(() => import("./login-ask").then((m) => m.LoginAsk));
 const LocationRequest = dynamic(() => import("./location-request").then((m) => m.LocationRequest));
 const PhotoRequest = dynamic(() => import("./photo-request").then((m) => m.PhotoRequest));
 const ListingPreview = dynamic(() => import("./hosting").then((m) => m.ListingPreview));
@@ -120,14 +125,32 @@ export function Chat({ initialMessages }: { initialMessages?: AgentUIMessage[] }
   const { messages, setMessages, sendMessage, status, stop, error, regenerate, addToolOutput } =
     useChat<AgentUIMessage>({
       messages: initialMessages,
-      // askForDates / askForLocation / askForPhotos are answered in the browser; send once they are.
+      // askForDates / askForLocation / askForPhotos / askForLogin are answered in the browser; send once
+      // they are. askForLogin's card answers with { saved, site, login } only, never the password.
       sendAutomaticallyWhen: lastAssistantMessageIsCompleteWithToolCalls,
     });
   const [input, setInput] = useState("");
+  // Dictated text joins whatever is already typed; the person checks it before sending.
+  const dictation = useDictation((text) => setInput((v) => (v.trim() ? `${v.trimEnd()} ${text}` : text)));
   const [attachments, setAttachments] = useState<Attachment[]>([]);
   const bottomRef = useRef<HTMLDivElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const busy = status === "submitted" || status === "streaming";
+  // Couchbot is happy for a moment when a search lands with results, then back to work.
+  const [cheering, setCheering] = useState(false);
+  useEffect(() => {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const cheer = () => {
+      setCheering(true);
+      clearTimeout(timer);
+      timer = setTimeout(() => setCheering(false), 1500);
+    };
+    window.addEventListener(COUCHBOT_FOUND, cheer);
+    return () => {
+      window.removeEventListener(COUCHBOT_FOUND, cheer);
+      clearTimeout(timer);
+    };
+  }, []);
   const empty = messages.length === 0;
   const uploading = attachments.some((a) => !a.file && !a.failed);
   const ready = attachments.flatMap((a) => (a.file ? [a.file] : []));
@@ -149,7 +172,28 @@ export function Chat({ initialMessages }: { initialMessages?: AgentUIMessage[] }
     setSeenNewest(newest);
     setPanelId(newest);
   }
-  const panel = panelId ? listings.get(panelId) : undefined;
+  // Stays the guest opened by clicking a card, fetched straight from /api/listings/<id> (no chat turn).
+  const [clicked, setClicked] = useState<Map<string, StayDetails | "loading" | "missing">>(() => new Map());
+  const clickedEntry = panelId?.startsWith("listing:") ? clicked.get(panelId) : undefined;
+  const panel = panelId
+    ? (listings.get(panelId) ?? (typeof clickedEntry === "object" ? clickedEntry : undefined))
+    : undefined;
+
+  /** Open a stay card on the right: the agent's copy if it already loaded it, else fetch it once. */
+  function openStay(id: string) {
+    const loaded = [...listings].find(([, l]) => l.id === id)?.[0];
+    if (loaded) return setPanelId(loaded);
+    const key = `listing:${id}`;
+    setPanelId(key);
+    if (clicked.has(key) && clicked.get(key) !== "missing") return;
+    setClicked((m) => new Map(m).set(key, "loading"));
+    fetch(`/api/listings/${id}`)
+      .then((res) => (res.ok ? (res.json() as Promise<StayDetails>) : Promise.reject()))
+      .then(
+        (details) => setClicked((m) => new Map(m).set(key, details)),
+        () => setClicked((m) => new Map(m).set(key, "missing")),
+      );
+  }
   const applicationPanel = panelId && applications.has(panelId) ? panelId : null;
 
   // Saved conversations (this browser) and what's waiting on the member, for the home screen.
@@ -180,15 +224,20 @@ export function Chat({ initialMessages }: { initialMessages?: AgentUIMessage[] }
     } else setListOpen(true);
   }
 
-  function toggleInList(item: Omit<ApplyListItem, "addedAt">) {
+  /** `from` is the button that was clicked: the stay's photo flies from there into the list. */
+  function toggleInList(item: Omit<ApplyListItem, "addedAt">, from?: HTMLElement) {
     if (inList.has(item.id)) return removeFromApplyList(item.id);
-    if (addToApplyList(item)) setListHidden(false);
-    else showList(); // full: show why
+    if (addToApplyList(item)) {
+      setListHidden(false);
+      if (from) flyToList(from, item.id, item.photo);
+    } else showList(); // full: show why
   }
 
   function applyToList() {
     if (!applyList.length || busy || uploading) return;
-    send(applyListPrompt(applyList));
+    send(applyListPrompt(applyList), {
+      apply: applyList.map(({ id, title, photo, site }) => ({ id, title, photo, site })),
+    });
     clearApplyList();
     setListOpen(false);
   }
@@ -222,11 +271,12 @@ export function Chat({ initialMessages }: { initialMessages?: AgentUIMessage[] }
   }, [profileSaves]);
 
 
-  function send(text: string) {
+  /** `metadata` only changes how the message is drawn (e.g. apply cards); the model gets `text`. */
+  function send(text: string, metadata?: AgentMessageMetadata) {
     const t = text.trim();
     if ((!t && !ready.length) || busy || uploading) return;
     if (empty) history.started();
-    sendMessage({ text: t || "Here are the photos.", files: ready.length ? ready : undefined });
+    sendMessage({ text: t || "Here are the photos.", files: ready.length ? ready : undefined, metadata });
     setInput("");
     attachments.forEach((a) => URL.revokeObjectURL(a.preview));
     setAttachments([]);
@@ -271,6 +321,8 @@ export function Chat({ initialMessages }: { initialMessages?: AgentUIMessage[] }
       autoFocus={empty}
       placeholder={empty ? "Where do you need to stay, or what do you want to list?" : "Ask a follow-up…"}
       onAttach={() => fileRef.current?.click()}
+      onDictate={dictation.toggle}
+      dictation={dictation.view}
       canSend={(Boolean(input.trim()) || ready.length > 0) && !uploading}
       attachments={
         attachments.length > 0 && (
@@ -320,6 +372,7 @@ export function Chat({ initialMessages }: { initialMessages?: AgentUIMessage[] }
               greeting="Where to next?"
               subtitle="Tell me where you're going, or put your own place up."
               composer={composer}
+              notice={<HomePushBanner />}
               attention={<AttentionList items={attention} />}
               recent={
                 <RecentChats
@@ -338,19 +391,26 @@ export function Chat({ initialMessages }: { initialMessages?: AgentUIMessage[] }
             <Conversation endRef={bottomRef}>
               {messages.map((m) =>
                 m.role === "user" ? (
-                  <UserMessage
-                    key={m.id}
-                    photos={m.parts.flatMap((p) =>
-                      p.type === "file" && p.mediaType.startsWith("image/") ? [p.url] : [],
-                    )}
-                  >
-                    {m.parts.map((p, i) => (p.type === "text" ? <Fragment key={i}>{p.text}</Fragment> : null))}
-                  </UserMessage>
+                  m.metadata?.apply?.length ? (
+                    <ApplyRequest key={m.id} places={m.metadata.apply} />
+                  ) : (
+                    <UserMessage
+                      key={m.id}
+                      photos={m.parts.flatMap((p) =>
+                        p.type === "file" && p.mediaType.startsWith("image/") ? [p.url] : [],
+                      )}
+                    >
+                      {m.parts.map((p, i) =>
+                        // Chats saved before apply cards still have the ids in the text; hide them.
+                        p.type === "text" ? <Fragment key={i}>{p.text.replace(LISTING_IDS, "")}</Fragment> : null,
+                      )}
+                    </UserMessage>
+                  )
                 ) : (
                   <AssistantMessage
                     key={m.id}
                     live={m.id === messages.at(-1)?.id}
-                    mood={busy && m.id === messages.at(-1)?.id ? "thinking" : "idle"}
+                    mood={m.id !== messages.at(-1)?.id ? "idle" : cheering ? "happy" : busy ? "thinking" : "idle"}
                   >
                     {m.parts.map((p, i) => {
                       const key = `${m.id}-${i}`;
@@ -361,6 +421,7 @@ export function Chat({ initialMessages }: { initialMessages?: AgentUIMessage[] }
                           send={send}
                           openPanel={panelId}
                           onOpenPanel={setPanelId}
+                          onOpenStay={openStay}
                           stale={(id) => latestCard.get(id) !== key}
                           last={m.id === messages.at(-1)?.id}
                           addToolOutput={addToolOutput}
@@ -400,6 +461,12 @@ export function Chat({ initialMessages }: { initialMessages?: AgentUIMessage[] }
         )}
       </ChatColumn>
 
+      {!panel && (clickedEntry === "loading" || clickedEntry === "missing") && (
+        <SidePanel label="Listing" onClose={() => setPanelId(null)}>
+          <StayPanelPlaceholder missing={clickedEntry === "missing"} onClose={() => setPanelId(null)} />
+        </SidePanel>
+      )}
+
       {panel && (
         <SidePanel label={panel.title ?? "Listing"} onClose={() => setPanelId(null)}>
           <StayPanel
@@ -416,7 +483,7 @@ export function Chat({ initialMessages }: { initialMessages?: AgentUIMessage[] }
                   </ButtonLink>
                 )}
                 <span className="ml-auto flex gap-2">
-                  <Button variant="secondary" size="sm" aria-pressed={inList.has(panel.id)} onClick={() => toggleInList(toApplyListItem(panel))}>
+                  <Button variant="secondary" size="sm" aria-pressed={inList.has(panel.id)} onClick={(e) => toggleInList(toApplyListItem(panel), e.currentTarget)}>
                     {inList.has(panel.id) ? (
                       <>
                         <CheckIcon size={16} strokeWidth={2.4} />
@@ -426,7 +493,14 @@ export function Chat({ initialMessages }: { initialMessages?: AgentUIMessage[] }
                       "Add to list"
                     )}
                   </Button>
-                  <Button size="sm" onClick={() => send(applyPrompt(panel.title, panel.id))}>
+                  <Button
+                    size="sm"
+                    onClick={() =>
+                      send(applyPrompt(panel.title, panel.id), {
+                        apply: [{ id: panel.id, title: panel.title ?? "This listing", photo: panel.photos[0], site: panel.source.id }],
+                      })
+                    }
+                  >
                     Apply now
                   </Button>
                 </span>
@@ -449,11 +523,15 @@ export function Chat({ initialMessages }: { initialMessages?: AgentUIMessage[] }
 /** What the Apply buttons send; the agent drafts the application from it. */
 const applyPrompt = (title: string | null, id: string) => `Apply to "${title ?? "this listing"}" for me (listing ${id})`;
 
+/** " (listing <uuid>)" in an apply prompt: the model needs it, the person doesn't. */
+const LISTING_IDS = / ?\(listing [0-9a-f-]{36}\)/g;
+
 function PartView({
   part: p,
   send,
   openPanel,
   onOpenPanel,
+  onOpenStay,
   stale,
   last,
   addToolOutput,
@@ -461,10 +539,12 @@ function PartView({
   onToggleList,
 }: {
   part: Part;
-  send: (text: string) => void;
+  send: (text: string, metadata?: AgentMessageMetadata) => void;
   /** What the side panel shows: a getListing tool call id or an application id. */
   openPanel: string | null;
   onOpenPanel: (id: string) => void;
+  /** A stay card was clicked: show that listing on the right, without a chat turn. */
+  onOpenStay: (listingId: string) => void;
   /** Whether a newer card for this host listing appears later in the chat. */
   stale: (listingId: string) => boolean;
   /** Whether this part's message is the newest; older browser-answered tools are read-only. */
@@ -472,7 +552,7 @@ function PartView({
   addToolOutput: UseChatHelpers<AgentUIMessage>["addToolOutput"];
   /** Listing ids on the apply list. */
   inList: Set<string>;
-  onToggleList: (item: Omit<ApplyListItem, "addedAt">) => void;
+  onToggleList: (item: Omit<ApplyListItem, "addedAt">, from?: HTMLElement) => void;
 }) {
   switch (p.type) {
     case "text":
@@ -480,17 +560,22 @@ function PartView({
     case "tool-searchStays":
       if (p.state === "output-error") return <ToolStatus failed label="The search failed." />;
       return (
-        <LiveSearch done={p.state === "output-available"} location={p.input?.location} sources={p.input?.sources}>
+        <LiveSearch
+          done={p.state === "output-available"}
+          found={p.state === "output-available" && p.output.results.length > 0}
+          location={p.input?.location}
+          sources={p.input?.sources}
+        >
           {p.state === "output-available" && (
             <StayResults
               stays={p.output.results.map(toStayCard)}
               total={p.output.total}
-              onOpen={(s) => send(`Tell me more about "${s.title}"`)}
-              onApply={(s) => send(applyPrompt(s.title, s.id))}
+              onOpen={(s) => onOpenStay(s.id)}
+              onApply={(s) => send(applyPrompt(s.title, s.id), { apply: [{ id: s.id, title: s.title, photo: s.photo, site: s.site }] })}
               inList={inList}
-              onAddToList={(s) => {
+              onAddToList={(s, from) => {
                 const r = p.output.results.find((x) => x.id === s.id);
-                if (r) onToggleList(toApplyListItem(r));
+                if (r) onToggleList(toApplyListItem(r), from);
               }}
             />
           )}
@@ -543,6 +628,17 @@ function PartView({
           done={p.state === "output-available" ? p.output : undefined}
           disabled={!last}
           onDone={(output) => addToolOutput({ tool: "askForPhotos", toolCallId: p.toolCallId, output })}
+        />
+      );
+    case "tool-askForLogin":
+      if (p.state === "input-streaming") return <ToolStatus label="Opening a secure form…" />;
+      if (p.state === "output-error") return <ToolStatus failed label="Couldn't ask for the login." />;
+      return (
+        <LoginAsk
+          input={p.input}
+          done={p.state === "output-available" ? p.output : undefined}
+          disabled={!last}
+          onDone={(output) => addToolOutput({ tool: "askForLogin", toolCallId: p.toolCallId, output })}
         />
       );
     case "tool-saveListingDraft":

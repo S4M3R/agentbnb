@@ -8,7 +8,7 @@ import { agentModel } from "@/lib/agent/model";
 import { accessRules, accessTools } from "@/lib/browser-access";
 import { getHostListing, HostingError, type HostListing } from "./listings";
 import { ARRANGEMENT_LABEL, getNetwork, type Network } from "./networks";
-import { updatePublication as update } from "./publications";
+import { notifyPublication, updatePublication as update } from "./publications";
 
 // Publishing a host's listing to an external network with a browser agent.
 //
@@ -108,22 +108,22 @@ export async function runPublication(publicationId: string) {
         .update(userSourceAccounts)
         .set({ status: "connected", connectedAt: now })
         .where(and(eq(userSourceAccounts.userId, userId), eq(userSourceAccounts.sourceId, network.id)));
+      await notifyPublication(publicationId, "live", outcome.summary);
     } else if (outcome.kind === "gave_up") {
       await update(publicationId, { status: "failed", error: outcome.reason, statusMessage: outcome.reason });
+      await notifyPublication(publicationId, "failed", outcome.reason);
     } else if (outcome.kind === "out_of_time") {
-      await update(publicationId, {
-        status: "needs_user",
-        statusMessage: "I ran out of time in this browser session. Tap Continue and I'll pick up where I left off.",
-      });
+      const message = "I ran out of time in this browser session. Tap Continue and I'll pick up where I left off.";
+      await update(publicationId, { status: "needs_user", statusMessage: message });
+      // Already waiting on the host when time ran out: they heard about that ask.
+      if (!outcome.whileWaiting) await notifyPublication(publicationId, "needs_user", message);
     }
     // "stopped" and "host_finished" were already written by the host's action.
   } catch (err) {
     if (!(err instanceof HostingError)) console.error("publication run failed", publicationId, err);
-    await update(publicationId, {
-      status: "failed",
-      error: err instanceof HostingError ? err.message : "The browser session broke. Try again.",
-      statusMessage: null,
-    });
+    const error = err instanceof HostingError ? err.message : "The browser session broke. Try again.";
+    await update(publicationId, { status: "failed", error, statusMessage: null });
+    await notifyPublication(publicationId, "failed", error);
   } finally {
     await stagehand?.close().catch(() => {});
     await browser?.close().catch(() => {});
@@ -134,7 +134,7 @@ export async function runPublication(publicationId: string) {
 type Outcome =
   | { kind: "published"; externalUrl?: string; summary: string }
   | { kind: "gave_up"; reason: string }
-  | { kind: "out_of_time" }
+  | { kind: "out_of_time"; whileWaiting?: boolean }
   | { kind: "stopped" }
   | { kind: "host_finished" };
 
@@ -198,6 +198,7 @@ async function driveBrowser({
   async function waitForHost(message: string): Promise<"continue" | "stop"> {
     const asked = new Date();
     await update(publicationId, { status: "needs_user", statusMessage: message });
+    await notifyPublication(publicationId, "needs_user", message);
     while (Date.now() < deadline) {
       await new Promise((r) => setTimeout(r, POLL_MS));
       const [p] = await db
@@ -210,7 +211,7 @@ async function driveBrowser({
       else continue;
       return "stop";
     }
-    end({ kind: "out_of_time" });
+    end({ kind: "out_of_time", whileWaiting: true });
     return "stop";
   }
 

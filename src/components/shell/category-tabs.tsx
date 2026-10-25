@@ -5,6 +5,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Suspense, useEffect, useState, type MouseEvent } from "react";
 import { isActive, type NavTab } from "./nav";
+import { RollingNumber } from "@/components/ui/rolling-number";
 
 type TabsProps = {
   tabs: NavTab[];
@@ -131,7 +132,7 @@ function TabIcon({ tab, active, size }: { tab: NavTab; active: boolean; size: nu
       </span>
       {tab.count != null && (
         <span className="absolute -right-1 -top-0.5 min-w-[18px] rounded-full border-2 border-canvas bg-rausch px-1 text-center text-[10px] font-bold leading-[14px] text-white tabular-nums">
-          {tab.count}
+          <RollingNumber value={tab.count} />
           <span className="sr-only"> unread</span>
         </span>
       )}
