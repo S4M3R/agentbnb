@@ -2,6 +2,7 @@ import "server-only";
 import { createCipheriv, createDecipheriv, randomBytes, randomInt } from "node:crypto";
 import { and, desc, eq, isNotNull } from "drizzle-orm";
 import { db, schema } from "@/db";
+import { joinNotes, splitNotes } from "@/lib/password";
 import { sourceForUrl } from "@/lib/source-logos";
 
 // The Keychain: each person's logins on other sites, so the browser agent can sign in (or sign up)
@@ -132,7 +133,13 @@ export async function getCredential(userId: string, site: string): Promise<Crede
 /** Whether there's a login for the site, and how it's doing, without decrypting anything. */
 export async function entryState(userId: string, site: string) {
   const [row] = await db
-    .select({ id: entries.id, status: entries.status, createdBy: entries.createdBy, updatedAt: entries.updatedAt })
+    .select({
+      id: entries.id,
+      status: entries.status,
+      createdBy: entries.createdBy,
+      notes: entries.notes,
+      updatedAt: entries.updatedAt,
+    })
     .from(entries)
     .where(and(eq(entries.userId, userId), eq(entries.site, site)));
   return row ?? null;
@@ -140,7 +147,8 @@ export async function entryState(userId: string, site: string) {
 
 /**
  * Save (or replace) the login for a site. A blank `password` on an existing entry keeps the old one,
- * so the person can fix the login or notes without retyping it.
+ * so the person can fix the login or notes without retyping it. `generated`: the person made the
+ * password with "Generate a secure password"; the notes say so (see src/lib/password.ts).
  */
 export async function saveCredential(input: {
   userId: string;
@@ -150,6 +158,7 @@ export async function saveCredential(input: {
   createdBy: CreatedBy;
   status?: EntryStatus;
   notes?: string | null;
+  generated?: boolean;
 }) {
   const { userId, site } = input;
   const login = input.login.trim();
@@ -157,12 +166,16 @@ export async function saveCredential(input: {
   const existing = await entryState(userId, site.site);
   if (!input.password && !existing) throw new KeychainError("Add the password.");
 
+  // A new password sets the "generated" mark; keeping the old one keeps it.
+  const prior = splitNotes(existing?.notes);
+  const generated = input.password ? !!input.generated : prior.generated;
+  const text = input.notes !== undefined ? input.notes : prior.text;
   const values = {
     login,
     ...(input.password && { secretCiphertext: encryptSecret(input.password, userId, site.site) }),
     createdBy: input.createdBy,
     status: input.status ?? "active",
-    ...(input.notes !== undefined && { notes: input.notes?.trim() || null }),
+    notes: joinNotes(text, generated),
   };
   const [row] = await db
     .insert(entries)

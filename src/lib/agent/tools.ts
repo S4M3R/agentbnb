@@ -3,11 +3,13 @@ import { and, count, desc, eq, inArray, isNotNull, sql, type SQL } from "drizzle
 import { z } from "zod";
 import { db, schema } from "@/db";
 import { clip, highlights, loadPhotos, loadWindows, locationLabel, openWindow, today } from "@/lib/listing-cards";
+import { applyEaseRank } from "@/lib/apply-ease";
 import { MARKETS } from "@/lib/markets";
 import type { WebSession } from "@/lib/session";
 import { applyTools } from "./apply-tools";
 import { calendarTools } from "./calendar-tools";
 import { hostingTools } from "./hosting-tools";
+import { askForLogin } from "./login-tools";
 import { profileTools } from "./profile-tools";
 
 const { listings, listingAvailability: avail, sources, externalHosts } = schema;
@@ -55,7 +57,11 @@ const searchStays = tool({
   execute: async (input) => {
     const from = input.startDate ?? today();
     const to = input.endDate ?? input.startDate;
-    const where: SQL[] = [eq(listings.status, "active")];
+    // Hidden networks (sources.enabled = false, e.g. Esperanto-only Pasporta Servo) never show up.
+    const where: SQL[] = [
+      eq(listings.status, "active"),
+      sql`${listings.sourceId} in (select ${sources.id} from ${sources} where ${sources.enabled})`,
+    ];
     let center: { lat: number; lng: number } | null = null;
 
     if (input.location) {
@@ -135,7 +141,12 @@ const searchStays = tool({
         .from(listings)
         .innerJoin(sources, eq(sources.id, listings.sourceId))
         .where(filter)
-        .orderBy(center ? distanceKm(center) : sql`${nextStart} asc nulls last`, desc(listings.lastSeenAt))
+        // Places the agent can actually apply to first (free sign-up sites, then contact forms), then as before.
+        .orderBy(
+          applyEaseRank(listings.sourceId),
+          center ? distanceKm(center) : sql`${nextStart} asc nulls last`,
+          desc(listings.lastSeenAt),
+        )
         .limit(input.limit),
       db.select({ total: count() }).from(listings).where(filter),
     ]);
@@ -178,63 +189,66 @@ function distanceKm(c: { lat: number; lng: number }) {
   return sql`(6371 * 2 * asin(sqrt(power(sin(radians(${listings.lat} - ${c.lat}) / 2), 2) + cos(radians(${c.lat})) * cos(radians(${listings.lat})) * power(sin(radians(${listings.lng} - ${c.lng}) / 2), 2))))`;
 }
 
+/** One listing's full details, as getListing returns them (and as the side panel shows them). */
+export async function getListingDetails(id: string) {
+  const [row] = await db
+    .select({ listing: listings, sourceName: sources.name, host: externalHosts })
+    .from(listings)
+    .innerJoin(sources, eq(sources.id, listings.sourceId))
+    .leftJoin(externalHosts, eq(externalHosts.id, listings.externalHostId))
+    .where(eq(listings.id, id));
+  if (!row) return { error: "Listing not found" as const };
+
+  const l = row.listing;
+  const [photos, windows] = await Promise.all([loadPhotos([id], 6), loadWindows([id], today())]);
+  const attributes = Object.fromEntries(
+    Object.entries(l.attributes).map(([k, v]) => [k, typeof v === "string" ? clip(v, 800) : v]),
+  );
+
+  return {
+    id: l.id,
+    title: clip(l.title, 200),
+    type: l.type,
+    source: { id: l.sourceId, name: row.sourceName },
+    url: l.externalUrl,
+    location: locationLabel(l),
+    locationPrecision: l.locationPrecision,
+    photos: photos.get(id) ?? [],
+    dates: (windows.get(id) ?? []).slice(0, 12).map((w) => ({
+      start: w.startDate,
+      end: w.endDate,
+      details: w.attributes,
+    })),
+    highlights: highlights(l.sourceId, l.attributes),
+    description: clip(l.description, 3000),
+    guestExpectations: clip(l.guestExpectations, 1500),
+    houseRules: clip(l.houseRules, 1000),
+    maxGuests: l.maxGuests,
+    minNights: l.minNights,
+    maxNights: l.maxNights,
+    price: { model: l.priceModel, amountCents: l.priceAmountCents, currency: l.currency },
+    amenities: l.amenities,
+    languages: l.languages,
+    attributes,
+    rating: l.rating || null,
+    host: row.host && {
+      name: row.host.displayName,
+      profileUrl: row.host.profileUrl,
+      avatarUrl: row.host.avatarUrl,
+      references: row.host.referenceCount,
+      rating: row.host.rating,
+      memberSince: row.host.memberSince,
+    },
+    lastSeenAt: l.lastSeenAt,
+  };
+}
+
 const getListing = tool({
   description:
     "Full details for one listing from searchStays: description, what the host expects, house rules, " +
     "pets, host profile, photos and every upcoming date window. Use before recommending or drafting a message.",
   inputSchema: z.object({ id: z.uuid().describe("Listing id from searchStays.") }),
-  execute: async ({ id }) => {
-    const [row] = await db
-      .select({ listing: listings, sourceName: sources.name, host: externalHosts })
-      .from(listings)
-      .innerJoin(sources, eq(sources.id, listings.sourceId))
-      .leftJoin(externalHosts, eq(externalHosts.id, listings.externalHostId))
-      .where(eq(listings.id, id));
-    if (!row) return { error: "Listing not found" as const };
-
-    const l = row.listing;
-    const [photos, windows] = await Promise.all([loadPhotos([id], 6), loadWindows([id], today())]);
-    const attributes = Object.fromEntries(
-      Object.entries(l.attributes).map(([k, v]) => [k, typeof v === "string" ? clip(v, 800) : v]),
-    );
-
-    return {
-      id: l.id,
-      title: clip(l.title, 200),
-      type: l.type,
-      source: { id: l.sourceId, name: row.sourceName },
-      url: l.externalUrl,
-      location: locationLabel(l),
-      locationPrecision: l.locationPrecision,
-      photos: photos.get(id) ?? [],
-      dates: (windows.get(id) ?? []).slice(0, 12).map((w) => ({
-        start: w.startDate,
-        end: w.endDate,
-        details: w.attributes,
-      })),
-      highlights: highlights(l.sourceId, l.attributes),
-      description: clip(l.description, 3000),
-      guestExpectations: clip(l.guestExpectations, 1500),
-      houseRules: clip(l.houseRules, 1000),
-      maxGuests: l.maxGuests,
-      minNights: l.minNights,
-      maxNights: l.maxNights,
-      price: { model: l.priceModel, amountCents: l.priceAmountCents, currency: l.currency },
-      amenities: l.amenities,
-      languages: l.languages,
-      attributes,
-      rating: l.rating || null,
-      host: row.host && {
-        name: row.host.displayName,
-        profileUrl: row.host.profileUrl,
-        avatarUrl: row.host.avatarUrl,
-        references: row.host.referenceCount,
-        rating: row.host.rating,
-        memberSince: row.host.memberSince,
-      },
-      lastSeenAt: l.lastSeenAt,
-    };
-  },
+  execute: async ({ id }) => getListingDetails(id),
 });
 
 const getCoverage = tool({
@@ -302,7 +316,28 @@ const askForDates = tool({
 export const stayTools = { searchStays, getListing, getCoverage };
 
 export function createAgentTools(session: WebSession) {
-  return { ...stayTools, askForDates, ...hostingTools(session), ...applyTools(session), ...profileTools(session), ...calendarTools(session) };
+  return {
+    ...stayTools,
+    askForDates,
+    askForLogin,
+    ...hostingTools(session),
+    ...applyTools(session),
+    ...profileTools(session),
+    ...calendarTools(session),
+  };
 }
 
-export type AgentUIMessage = UIMessage<never, UIDataTypes, InferUITools<ReturnType<typeof createAgentTools>>>;
+/**
+ * Display-only extras on a chat message. convertToModelMessages ignores metadata, so the model only ever
+ * sees the message text; the chat uses this to draw the message nicely.
+ */
+export type AgentMessageMetadata = {
+  /** An "apply" request: the places it names, shown as small cards instead of the prompt with listing ids. */
+  apply?: { id: string; title: string; photo?: string | null; site?: string | null }[];
+};
+
+export type AgentUIMessage = UIMessage<
+  AgentMessageMetadata,
+  UIDataTypes,
+  InferUITools<ReturnType<typeof createAgentTools>>
+>;

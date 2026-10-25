@@ -45,6 +45,10 @@ It has two sides:
   cookie (`src/lib/session.ts`) and the user row is created the first time they host.
   Each member has a public profile at `/people/[id]` (never email, addresses or exact
   locations), edited at `/me/profile`, by the chat agent, or with `PATCH /api/v1/me`.
+  `/me/profile` and the chat's `updateProfile` also set the private email (one per person, unique:
+  another member's email gets "That email belongs to another AgentBnB account", never a merge);
+  `PATCH /api/v1/me` rejects `email` (it's the API registration identity). Browser agents sign up
+  with it and login forms are prefilled with it; per-site logins live in the Keychain.
 - **agents**: a personal agent acting for a user; `kind` is `instinct` / `dot` / `muse` /
   `other` (self-declared, unverified), plus a `name`.
 - **api_keys**: bearer keys for `/api/v1`, held by the person (`agent_id` null) or one of
@@ -59,6 +63,13 @@ It has two sides:
   lat/lng are rounded to ~1 km.
 - **listing_photos**, **listing_availability** (date ranges), **external_hosts**.
 - **scrape_runs**: one row per ingest; complete runs mark unseen listings `gone`.
+- **listing_insights**: one AI read per listing (PK `listing_id`, cascade), for search. `summary`
+  (2-3 guest-facing sentences), `tags` text[] from the fixed vocabulary in
+  `src/lib/insights-vocabulary.ts` (GIN-indexed: `tags @> '{pets:cat}'`), `features` jsonb (kind,
+  pets, work, place, vibe, house rules, best for, red flags, quality flags), `photo_notes`
+  (captions for up to 4 photos), `photo_status` (`analyzed` / `text_only` when the CDN refused /
+  `no_photos`), `quality` 0-1, `embedding` vector(1536) (pgvector, HNSW cosine) over
+  `embedding_text`, `model`, `content_hash`, `usage`, `analyzed_at`. Nothing writes back to `listings`.
 - **listing_publications**: a host's internal listing copied onto an external network
   (Trustroots, BeWelcome, ...), with status `queued` / `running` / `needs_user` / `live` /
   `failed` / `removed`, the live-view URL while a browser session is open, and the public URL.
@@ -79,8 +90,9 @@ It has two sides:
 - **application_events**: each application's timeline: `status` changes, `message`s between
   guest and host (guest replies on external sites carry `data.delivery: "pending"` until the
   browser agent sends them), agent `activity`, and `nudge`s (overlap, no reply in 3 days).
-- **notifications**: in-app inbox (the Applications tab badge); each row is also sent by
-  Web Push (**push_subscriptions**, VAPID keys in env) and email (Resend) when available.
+- **notifications**: in-app inbox (the header's bell; the Applications tab badge counts the ones with an
+  `application_id`); each row is also sent by Web Push (**push_subscriptions**, VAPID keys in env) and
+  email (Resend) when available. See "Notifications" below.
 - **incoming_requests**: stay requests a host received, from any network. Internal ones are
   mirrored from `applications` when the host opens `/requests`; answering one there goes
   through `setStatus`, so the guest hears about it; external ones are imported
@@ -109,6 +121,19 @@ It has two sides:
   scrape exact addresses.
 - Paginated APIs need a stable sort (TrustedHousesitters: `published desc`),
   otherwise pages overlap and listings get missed.
+
+## Listing insights (`src/lib/insights.ts`)
+- `pnpm analyze` analyzes every active listing from an enabled source that changed since the last
+  run (text + up to 4 photos, downloaded and shrunk to 512px, sent at low detail) with
+  `gpt-6-luna` (`INSIGHTS_MODEL` overrides), saves each row as it finishes, then embeds new rows
+  with `text-embedding-3-small`. Unchanged listings are skipped via `content_hash` (prompt, model,
+  listing text, photo URLs), so it's resumable and cheap to rerun (~$0.0004/listing).
+- Flags: `--dry-run`, `--source <id>`, `--limit N`, `--per-source N` (random sample to try prompt
+  changes), `--id <uuid>`, `--force`, `--retry-text-only`, `--concurrency N` (default 12),
+  `--embed-only`. After an ingest, call `analyzeListingIds(ids)` from code.
+- Changing the prompt or vocabulary changes every hash, so the next run redoes everything; bump
+  `PROMPT_VERSION` to force it otherwise. Query embeddings with `embedQuery(text)` and
+  `embedding <=> $1::vector`.
 
 ## Hosting: adding your place (`src/lib/hosting/`)
 - A casual back-and-forth, one question per turn. The agent asks where the place is with
@@ -152,7 +177,14 @@ It has two sides:
 - A `needs_user` status event carries `data.ask` (`{ kind: "credentials" | "email" | "browser",
   site, siteName }`); `latestAsk()` reads it, and `NeedsUserBlock` (`src/app/me/keychain/forms.tsx`)
   shows the login or email form, else the live browser / Continue, on `/applications/[id]`, the
-  chat's application panel and `/me/keychain`.
+  chat's application panel and `/me/keychain`; the chat's application cards show the form inline
+  (`NeedsUserForm`, from `ask` on `GET /api/applications`). Login fields are prefilled with the
+  Keychain login for the site, else the profile email (`loginPrefill`).
+- "Generate a secure password" (`PasswordField`) makes a 20-character password in the browser
+  (`src/lib/password.ts`, `crypto.getRandomValues`, no ambiguous characters, letters-and-digits
+  fallback), shown with Show/Hide and Copy; it's saved through the same action, and the entry's notes
+  start with "Generated password" so the Keychain labels it "Generated". Agent sign-ups keep the
+  server generator in `keychain.ts`.
 - Security rules:
   - Passwords are encrypted at rest with AES-256-GCM (random 12-byte IV per entry, user id + site
     as additional data) under `KEYCHAIN_KEY` (32 bytes, base64; in `.env.local` and Vercel for
@@ -164,7 +196,11 @@ It has two sides:
     tool results, notes, events, logs, `variables` of the general `act` tool, or Browserbase metadata.
   - Passwords are write-only in the UI; "Reveal" works only for `created_by: agent` entries and
     needs an explicit click. Server actions never log their arguments or error objects.
-  - The chat never asks for passwords; it points people to the Keychain. No public API for secrets.
+  - The chat asks for a site login only with `askForLogin`, a client-side card that saves straight
+    to the Keychain (`saveChatLogin`) and answers the tool with `{ saved, site, login }` (or the
+    person's "browser" / "not now"); `toModelOutput` whitelists those fields. The password stays in
+    the card's state: never in tool output, messages, chat history (localStorage) or logs. No public
+    API for secrets.
 
 ## Applying for stays (`src/lib/applications.ts`, `src/lib/apply-agent.ts`)
 - The agent drafts one application per listing (intro in the guest's voice, tailored with
@@ -184,6 +220,36 @@ It has two sides:
 - `/api/cron/applications` (`vercel.ts`; daily on Hobby) starts due checks and sends the
   "no reply in 3 days" nudges. Opening the app also re-checks (at most every 30 min).
 
+## Notifications (`src/lib/notify.ts`, `src/components/notifications/`, `public/sw.js`)
+- `notify(userId, { title, body, url, applicationId, tag, email })` writes the inbox row, pushes to every
+  subscription and emails. Call it once per real event; pushes about the same thing share a `tag`
+  (`application:<id>`, `publication:<id>`, `request:<id>`, `check:<id>`; default: the application, else the
+  url), so the device keeps only the newest. A url-less one opens `/me/notifications`.
+- Events that notify: every application status change in `setStatus` (a repeated `needs_user` is quiet; its
+  title says if the agent wants a login or email, from `data.ask`), messages, host replies found on other
+  sites, "no reply in 3 days"; a new imported request (`importRequest`, not re-imports); a publication run
+  that needs the host, went live or failed (`notifyPublication`; the host's own Stop / "I finished" stay quiet);
+  a finished or failed background check (to the host); an unattended check that got logged out of a site
+  (once, not every check).
+- Bell: `GET /api/notifications` (`currentUser()`, never mints a session: `{ items, unread, worthHearing }`),
+  `POST /api/notifications/read { ids? }` (none = all). `useNotifications()` refreshes on focus, every 60s,
+  and when the service worker posts `{ type: "agentbnb:notification" }` (on push and on click).
+- Push opt-in: `usePush()` (one store per page: `unsupported` / `ios-install` / `default` / `off` / `on` /
+  `denied`) and props-only UI in `push-prompt.tsx`: a row with a switch and "Send a test" in the account
+  menu, `PushCard` on `/applications`, `/hosting` and `/me/notifications` (`PushSetup` in
+  `src/app/notifications.tsx`), and `HomePushBanner` on the home once the person has something going on
+  (dismissal in localStorage `abnb:push-banner-dismissed`). Permission is requested only from a click.
+  iPhone/iPad Safari outside the Home Screen gets the Add to Home Screen steps instead (push needs iOS 16.4+
+  and the installed app).
+- `POST /api/push/subscription { subscription, oldEndpoint? }` saves this browser's subscription (also what
+  the worker calls on `pushsubscriptionchange`), `DELETE` removes it, `GET` returns the VAPID public key.
+  `POST /api/notifications/test` sends the person a test (push + bell, no email; one per 10s).
+- `sw.js` is served from /public with `max-age=0` and registered with `updateViaCache: "none"`, so browsers
+  pick up changes on the next navigation. Icon `/app-icons/icon-192.png`, badge `/app-icons/badge-96.png`
+  (white Couchbot on transparent). Clicking marks the notification read and opens its url.
+- Headless check: grant `notifications` over CDP (`Browser.grantPermissions`, keep the connection open), then
+  `reg.getNotifications()` shows what the worker displayed. Real delivery still wants a phone.
+
 ## Calendar (`/calendar`, `src/components/calendar/`, `src/lib/calendar.ts`)
 - One month view of both sides: a lane per place you host (guests booked, requests, open and
   blocked nights, from AgentBnB and every network) and a "Where you sleep" lane for your trips
@@ -199,6 +265,8 @@ It has two sides:
   `recommendNetworks`, `addToNetworks`, `getMyListings`.
 - Applying: `getMyApplications`, `applyToListings`, `sendApplications`,
   `messageHost`, `withdrawApplications`, `scheduleStay`, `respondToRequest` (hosts).
+- Logins: `askForLogin({ site, siteName, reason })` (client-side secure card, `src/app/login-ask.tsx`;
+  web chat only). Saving it also resumes applications waiting for that site's login.
 - Profile: `getMyProfile`, `updateProfile` (name, photo, bio, home city, languages, plus the private
   email in the web chat), filled from the conversation. `src/lib/agent/profile-tools.ts`; validation is
   `ProfileInput` in `src/lib/profile.ts`, shared with `/me/profile` and `PATCH /api/v1/me`.
@@ -224,7 +292,7 @@ It has two sides:
   Airbnb Cereal is proprietary: use Inter, as the file's font note suggests.
 - Brand: the agent is **Couchbot** (`Couchbot` in `src/components/brand/logo.tsx`), a puffy
   armchair that is both the logo and the agent's face. Moods: `idle`, `thinking` (while it works),
-  `happy`, `sleepy` (empty states, 404); `animated` adds blink / look-around / bob. The wordmark and
+  `happy`, `sleepy` (empty states, 404); `animated` adds blink / look-around / drifting z's / bob. The wordmark and
   Couchbot's big lines (home greeting, 404) use Bricolage Grotesque (`font-brand`); the rest is Inter.
 - SEO lives in `src/app/layout.tsx` (metadata, JSON-LD), `src/lib/site.ts` (URL, name, copy),
   `robots.ts`, `sitemap.ts`, `manifest.ts` and `opengraph-image.tsx`. Pages set a bare `title`;

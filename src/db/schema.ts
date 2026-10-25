@@ -14,6 +14,7 @@ import {
   timestamp,
   uniqueIndex,
   uuid,
+  vector,
 } from "drizzle-orm/pg-core";
 
 const timestamps = {
@@ -299,6 +300,81 @@ export const listingPhotos = pgTable(
     createdAt: timestamps.createdAt,
   },
   (t) => [index("listing_photos_listing_idx").on(t.listingId, t.position)],
+);
+
+/**
+ * What an AI read of a listing (its text and up to 4 photos) found, for search. One row per
+ * listing; written only by src/lib/insights.ts (`pnpm analyze`). `tags` come from the fixed
+ * vocabulary in src/lib/insights-vocabulary.ts. `contentHash` covers the model input, so
+ * unchanged listings are skipped on rerun.
+ */
+export type ListingFeatures = {
+  /** What kind of stay this is, in one word ("house_sit", "dorm_bed", "home_swap", ...). */
+  kind: string;
+  pets: { kinds: string[]; count: number | null; needs: string | null } | null;
+  work: {
+    hoursPerWeek: number | null;
+    tasks: string[];
+    skills: string[];
+    /** What the host gives besides the bed ("meals", "bike", ...). */
+    perks: string[];
+  } | null;
+  place: {
+    privateRoom: boolean | null;
+    privateBath: boolean | null;
+    bedrooms: number | null;
+    beds: number | null;
+    workspace: boolean | null;
+    outdoor: string[];
+    setting: "urban" | "suburban" | "small_town" | "rural" | "remote" | null;
+  };
+  vibe: string[];
+  houseRules: string | null;
+  minStay: string | null;
+  bestFor: string[];
+  redFlags: string[];
+  /** Why quality is what it is: "empty_description", "placeholder_photos", "duplicate_text", ... */
+  qualityFlags: string[];
+};
+
+export type PhotoNotes = {
+  overall: string | null;
+  light: string | null;
+  condition: string | null;
+  style: string | null;
+  view: string | null;
+  outdoor: string | null;
+  captions: { url: string; caption: string }[];
+};
+
+export const listingInsights = pgTable(
+  "listing_insights",
+  {
+    listingId: uuid("listing_id")
+      .primaryKey()
+      .references(() => listings.id, { onDelete: "cascade" }),
+    /** 2-3 plain, guest-facing sentences. */
+    summary: text("summary").notNull(),
+    tags: text("tags").array().notNull().default(sql`'{}'::text[]`),
+    features: jsonb("features").$type<ListingFeatures>().notNull(),
+    photoNotes: jsonb("photo_notes").$type<PhotoNotes>(),
+    /** `analyzed`: photos were seen. `text_only`: photos existed but couldn't be fetched. `no_photos`. */
+    photoStatus: text("photo_status").notNull(),
+    /** 0-1: how complete and appealing the listing is. Junk, empty and duplicate-looking ones score low. */
+    quality: real("quality").notNull(),
+    /** text-embedding-3-small over `embeddingText`. Null until the embedding step has run. */
+    embedding: vector("embedding", { dimensions: 1536 }),
+    embeddingText: text("embedding_text"),
+    model: text("model").notNull(),
+    contentHash: text("content_hash").notNull(),
+    /** Tokens and cost of the analysis call. */
+    usage: jsonb("usage").$type<{ inputTokens: number; outputTokens: number; costUsd: number }>(),
+    analyzedAt: timestamp("analyzed_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => [
+    index("listing_insights_embedding_idx").using("hnsw", t.embedding.op("vector_cosine_ops")),
+    index("listing_insights_tags_idx").using("gin", t.tags),
+  ],
 );
 
 /** Date ranges a listing is open (or blocked). "This weekend" = one row. */

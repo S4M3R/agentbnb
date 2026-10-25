@@ -4,16 +4,20 @@ import Link from "next/link";
 import { useEffect, useState, useTransition } from "react";
 import { Button } from "@/components/ui/button";
 import { ChevronRightIcon } from "@/components/ui/icons";
+import type { NeedsUserAsk } from "@/lib/access";
 import type { ApplicationCard } from "@/lib/agent/apply-tools";
 import type { ApplicationStatus } from "@/lib/applications";
 import { sendApplications } from "./applications/actions";
+import { launchApplications } from "./applications/send-flight";
 import { STATUS, formatRange, statusClass } from "./applications/status";
 import { kickRuns } from "./applications/ui";
+import { hasNeedsUserForm, NeedsUserForm } from "./me/keychain/forms";
 import { MetaLine, SiteName } from "@/components/ui/site-name";
 
-// Application drafts and their live status, inside the chat.
+// Application drafts and their live status, inside the chat. One waiting for the person's login or
+// email shows that secure form right on its card; for anything else, "Open the browser".
 
-type Live = Record<string, { status: ApplicationStatus; statusMessage: string | null }>;
+type Live = Record<string, { status: ApplicationStatus; statusMessage: string | null; ask?: NeedsUserAsk | null }>;
 
 /** Fired when an application changes outside a card (e.g. sent from the side panel), so cards reload. */
 export const APPLICATIONS_CHANGED = "agentbnb:applications-changed";
@@ -40,7 +44,7 @@ function useLiveStatus(cards: ApplicationCard[]) {
     async function load() {
       const res = await fetch(`/api/applications?ids=${ids}`).catch(() => null);
       if (!res?.ok || stop) return;
-      const body: { applications: { id: string; status: ApplicationStatus; statusMessage: string | null }[] } = await res.json();
+      const body: { applications: (Live[string] & { id: string })[] } = await res.json();
       setLive(Object.fromEntries(body.applications.map((a) => [a.id, a])));
     }
     load();
@@ -89,6 +93,7 @@ export function ApplicationCards({
 
   function send(ids: string[]) {
     setError(null);
+    launchApplications(ids); // the cards flip over and fly to the Applications tab
     start(async () => {
       const r = await sendApplications(ids);
       if (!r.ok) setError(r.error);
@@ -147,76 +152,96 @@ function Card({
   const status = live?.status ?? c.status;
   const message = live ? live.statusMessage : c.statusMessage;
   const dates = formatRange(c.startDate, c.endDate);
+  // Waiting for a login or an email: the form, on the card (only from live status, never a snapshot).
+  const form = status === "needs_user" && hasNeedsUserForm(live?.ask) ? live!.ask! : null;
   return (
     <article
-      className={`flex gap-3 rounded-card border bg-canvas p-3 text-sm transition-colors sm:gap-4 ${selected ? "border-ink" : "border-hairline"}`}
+      data-application-card={c.id}
+      className={`rounded-card border bg-canvas p-3 text-sm transition-colors ${selected ? "border-ink" : "border-hairline"}`}
     >
-      <div className="size-16 shrink-0 overflow-hidden rounded-xl bg-surface-strong sm:size-[72px]">
-        {c.photo && (
-          // eslint-disable-next-line @next/next/no-img-element -- third-party listing photos
-          <img src={c.photo} alt="" loading="lazy" className="h-full w-full object-cover" />
-        )}
-      </div>
-      <div className="flex min-w-0 flex-1 flex-col gap-1">
-        <div className="flex items-start justify-between gap-2">
-          <div className="truncate text-[15px] font-semibold text-ink">{c.title}</div>
-          <span className={`shrink-0 rounded-full px-2.5 py-0.5 text-xs font-semibold ${statusClass(status)}`}>
-            {STATUS[status].label}
-          </span>
+      <div className="flex gap-3 sm:gap-4">
+        <div className="size-16 shrink-0 overflow-hidden rounded-xl bg-surface-strong sm:size-[72px]">
+          {c.photo && (
+            // eslint-disable-next-line @next/next/no-img-element -- third-party listing photos
+            <img src={c.photo} alt="" loading="lazy" className="h-full w-full object-cover" />
+          )}
         </div>
-        <MetaLine className="text-muted" parts={[<SiteName key="s" site={c.sourceId}>{c.source}</SiteName>, dates]} />
-        {status !== "draft" && message && <div className="text-body">{message}</div>}
-        {c.intro && status === "draft" && (
-          <button
-            type="button"
-            onClick={() => setOpen(!open)}
-            className={`text-left leading-relaxed text-body ${open ? "whitespace-pre-wrap" : "line-clamp-2"}`}
-          >
-            {c.intro}
-          </button>
-        )}
-        <div className="flex items-center gap-3 pt-1.5">
-          {status === "draft" && live && (
+        <div className="flex min-w-0 flex-1 flex-col gap-1">
+          <div className="flex items-start justify-between gap-2">
+            <div className="truncate text-[15px] font-semibold text-ink">{c.title}</div>
+            <span className={`shrink-0 rounded-full px-2.5 py-0.5 text-xs font-semibold ${statusClass(status)}`}>
+              {STATUS[status].label}
+            </span>
+          </div>
+          <MetaLine className="text-muted" parts={[<SiteName key="s" site={c.sourceId}>{c.source}</SiteName>, dates]} />
+          {status !== "draft" && message && <div className="text-body">{message}</div>}
+          {c.intro && status === "draft" && (
             <button
               type="button"
-              disabled={sending}
-              onClick={onSend}
-              className="inline-flex h-9 items-center rounded-lg bg-ink px-4 text-[13px] font-semibold text-white transition-colors hover:bg-body disabled:opacity-40"
+              onClick={() => setOpen(!open)}
+              className={`text-left leading-relaxed text-body ${open ? "whitespace-pre-wrap" : "line-clamp-2"}`}
             >
-              Send
+              {c.intro}
             </button>
           )}
-          {status === "needs_user" ? (
-            <Link
-              href={c.url}
-              onClick={(e) => {
-                // In the chat, the live browser opens in the side panel; elsewhere, on the application's page.
-                if (!onOpen) return;
-                e.preventDefault();
-                onOpen();
-              }}
-              aria-expanded={onOpen ? selected : undefined}
-              className="inline-flex h-9 items-center rounded-lg bg-rausch px-4 text-[13px] font-semibold text-white transition-colors hover:bg-rausch-active"
-            >
-              Open the browser
-            </Link>
-          ) : (
-            <Link
-              href={c.url}
-              onClick={(e) => {
-                if (!onOpen) return;
-                e.preventDefault();
-                onOpen();
-              }}
-              aria-expanded={onOpen ? selected : undefined}
-              className="inline-flex items-center gap-0.5 text-[13px] font-semibold text-ink underline-offset-2 hover:underline"
-            >
-              {status === "draft" ? "Review" : "Track it"}
-              <ChevronRightIcon size={14} strokeWidth={2.4} />
-            </Link>
-          )}
+          <div className="flex items-center gap-3 pt-1.5">
+            {status === "draft" && live && (
+              <button
+                type="button"
+                disabled={sending}
+                onClick={onSend}
+                className="inline-flex h-9 items-center rounded-lg bg-ink px-4 text-[13px] font-semibold text-white transition-colors hover:bg-body disabled:opacity-40"
+              >
+                Send
+              </button>
+            )}
+            {form ? (
+              <Link
+                href={c.url}
+                onClick={(e) => {
+                  if (!onOpen) return;
+                  e.preventDefault();
+                  onOpen();
+                }}
+                aria-expanded={onOpen ? selected : undefined}
+                className="inline-flex items-center gap-0.5 text-[13px] font-semibold text-ink underline-offset-2 hover:underline"
+              >
+                {form.kind === "credentials" ? "Or log in yourself in the browser" : "Track it"}
+                <ChevronRightIcon size={14} strokeWidth={2.4} />
+              </Link>
+            ) : status === "needs_user" ? (
+              <Link
+                href={c.url}
+                onClick={(e) => {
+                  // In the chat, the live browser opens in the side panel; elsewhere, on the application's page.
+                  if (!onOpen) return;
+                  e.preventDefault();
+                  onOpen();
+                }}
+                aria-expanded={onOpen ? selected : undefined}
+                className="inline-flex h-9 items-center rounded-lg bg-rausch px-4 text-[13px] font-semibold text-white transition-colors hover:bg-rausch-active"
+              >
+                Open the browser
+              </Link>
+            ) : (
+              <Link
+                href={c.url}
+                onClick={(e) => {
+                  if (!onOpen) return;
+                  e.preventDefault();
+                  onOpen();
+                }}
+                aria-expanded={onOpen ? selected : undefined}
+                className="inline-flex items-center gap-0.5 text-[13px] font-semibold text-ink underline-offset-2 hover:underline"
+              >
+                {status === "draft" ? "Review" : "Track it"}
+                <ChevronRightIcon size={14} strokeWidth={2.4} />
+              </Link>
+            )}
+          </div>
         </div>
       </div>
+      {form && <NeedsUserForm app={{ id: c.id, statusMessage: message }} ask={form} inline />}
     </article>
   );
 }

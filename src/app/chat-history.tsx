@@ -21,8 +21,12 @@ import { useCachedJson, writeCachedJson } from "@/lib/cached-json";
 // it to this browser after every turn and when the page goes away, and the "Recent conversations"
 // and "Needs your attention" data for the home screen.
 
-/** Tools the browser answers (a calendar, a map, a shot list): a saved chat can still be waiting on one. */
-const CLIENT_TOOLS = new Set(["tool-askForDates", "tool-askForLocation", "tool-askForPhotos"]);
+/**
+ * Tools the browser answers (a calendar, a map, a shot list, a login card): a saved chat can still be
+ * waiting on one. A waiting login card is saved with only its input (site, name, reason); what's typed
+ * in it lives in the card's state and is never stored.
+ */
+const CLIENT_TOOLS = new Set(["tool-askForDates", "tool-askForLocation", "tool-askForPhotos", "tool-askForLogin"]);
 const pendingOk = (type: string) => CLIENT_TOOLS.has(type);
 
 const NO_CHATS: ChatSummary[] = [];

@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { Bricolage_Grotesque, Inter } from "next/font/google";
 import { SITE_DESCRIPTION, SITE_NAME, SITE_TAGLINE, SITE_URL } from "@/lib/site";
 import "./globals.css";
+import { SLOT_SCRIPT } from "@/lib/reserved-slots";
 
 const inter = Inter({
   variable: "--font-inter",
@@ -97,7 +98,11 @@ const structuredData = {
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
-    <html lang="en" className={`${inter.variable} ${bricolage.variable} h-full antialiased`}>
+    <html lang="en" className={`${inter.variable} ${bricolage.variable} h-full antialiased`} suppressHydrationWarning>
+      <head>
+        {/* Before first paint: reserve the home's browser-only sections at their last height (no jump). */}
+        <script dangerouslySetInnerHTML={{ __html: SLOT_SCRIPT }} />
+      </head>
       <body className="min-h-full flex flex-col">
         <script
           type="application/ld+json"

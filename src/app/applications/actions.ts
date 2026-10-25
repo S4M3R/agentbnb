@@ -1,6 +1,6 @@
 "use server";
 
-import { and, eq } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { refresh } from "next/cache";
 import { z } from "zod";
 import { db, schema } from "@/db";
@@ -92,31 +92,6 @@ export async function continueInBrowser(applicationId: string) {
 export async function markNotificationsRead(applicationId?: string) {
   const user = await (await webSession()).user();
   if (user) await apps.markRead(user.id, applicationId ? id.parse(applicationId) : undefined);
-}
-
-const Subscription = z.object({
-  endpoint: z.url(),
-  keys: z.object({ p256dh: z.string().min(1), auth: z.string().min(1) }),
-});
-
-export async function savePushSubscription(sub: unknown, userAgent?: string) {
-  const user = await (await webSession()).ensureUser();
-  const s = Subscription.parse(sub);
-  await db
-    .insert(schema.pushSubscriptions)
-    .values({ userId: user.id, endpoint: s.endpoint, p256dh: s.keys.p256dh, auth: s.keys.auth, userAgent })
-    .onConflictDoUpdate({
-      target: schema.pushSubscriptions.endpoint,
-      set: { userId: user.id, p256dh: s.keys.p256dh, auth: s.keys.auth, userAgent },
-    });
-  return { ok: true as const };
-}
-
-export async function deletePushSubscription(endpoint: string) {
-  const user = await (await webSession()).user();
-  if (!user) return;
-  const { pushSubscriptions: subs } = schema;
-  await db.delete(subs).where(and(eq(subs.endpoint, z.url().parse(endpoint)), eq(subs.userId, user.id)));
 }
 
 export async function saveEmail(email: string): Promise<Result> {

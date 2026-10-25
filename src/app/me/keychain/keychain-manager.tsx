@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { CheckIcon, CloseIcon, PlusIcon, SearchIcon, ShieldIcon } from "@/components/ui/icons";
 import { SiteIcon } from "@/components/ui/site-name";
 import type { NeedsUserAsk } from "@/lib/access";
+import { splitNotes } from "@/lib/password";
 import { faviconFor } from "@/lib/source-logos";
 import { timeAgo } from "../../applications/status";
 import {
@@ -17,7 +18,7 @@ import {
   setAllowSignUp,
   type Result,
 } from "./actions";
-import { EmailRequest, Field, INPUT, LoginRequest } from "./forms";
+import { EmailRequest, Field, INPUT, LoginRequest, PasswordField } from "./forms";
 
 type Entry = {
   id: string;
@@ -187,6 +188,7 @@ function EntryRow({ entry, onEdit }: { entry: Entry; onEdit: () => void }) {
   const [copied, setCopied] = useState(false);
   // "Works" only once the agent actually signed in with it.
   const status = entry.status === "active" && !entry.lastUsedAt ? null : STATUS[entry.status];
+  const notes = splitNotes(entry.notes);
 
   // A revealed password hides itself again after 30 seconds.
   useEffect(() => {
@@ -214,13 +216,18 @@ function EntryRow({ entry, onEdit }: { entry: Entry; onEdit: () => void }) {
                 {status.label}
               </span>
             )}
+            {notes.generated && (
+              <span className="inline-flex h-[22px] items-center rounded-full bg-surface-strong px-2 text-[11px] font-bold text-ink">
+                Generated
+              </span>
+            )}
           </div>
           <div className="truncate text-[14px] text-body">{entry.login}</div>
           <div className="text-[13px] text-muted">
             {entry.createdBy === "agent" ? "Created by your agent" : "Saved by you"} ·{" "}
             {entry.lastUsedAt ? `Last used ${timeAgo(entry.lastUsedAt)}` : "Not used yet"}
           </div>
-          {entry.notes && <div className="mt-0.5 truncate text-[13px] text-muted">{entry.notes}</div>}
+          {notes.text && <div className="mt-0.5 truncate text-[13px] text-muted">{notes.text}</div>}
           {revealed && (
             <div className="mt-2 flex flex-wrap items-center gap-2">
               <code className="rounded-md bg-surface-strong px-2 py-1 font-mono text-[13px] tracking-wide text-ink">{revealed}</code>
@@ -470,7 +477,8 @@ function LoginDialog({
   const [query, setQuery] = useState("");
   const [login, setLogin] = useState(entry?.login ?? "");
   const [password, setPassword] = useState("");
-  const [notes, setNotes] = useState(entry?.notes ?? "");
+  const [generated, setGenerated] = useState(false);
+  const [notes, setNotes] = useState(splitNotes(entry?.notes).text ?? "");
   const [error, setError] = useState<{ field?: string; message: string } | null>(null);
   const [pending, start] = useTransition();
 
@@ -491,7 +499,7 @@ function LoginDialog({
   function submit() {
     setError(null);
     start(async () => {
-      const r = await saveLogin({ site: site === OTHER ? url : site!, login, password, notes });
+      const r = await saveLogin({ site: site === OTHER ? url : site!, login, password, notes, generated });
       if (!r.ok) return setError({ field: r.field, message: r.error });
       onClose();
     });
@@ -625,14 +633,16 @@ function LoginDialog({
                   htmlFor={`${id}-password`}
                   hint={entry ? "Leave blank to keep the saved one. Saved passwords can't be shown." : undefined}
                 >
-                  <input
+                  <PasswordField
                     id={`${id}-password`}
-                    name="password"
-                    type="password"
                     autoComplete={entry ? "new-password" : "current-password"}
                     value={password}
-                    onChange={(e) => setPassword(e.currentTarget.value)}
-                    className={`${INPUT} ${error?.field === "password" ? "border-error" : "border-hairline"}`}
+                    generated={generated}
+                    invalid={error?.field === "password"}
+                    onChange={(value, gen) => {
+                      setPassword(value);
+                      setGenerated(gen);
+                    }}
                   />
                 </Field>
                 <Field label="Notes (optional)" htmlFor={`${id}-notes`} hint="Not secret. For example, the username if you log in with your email.">

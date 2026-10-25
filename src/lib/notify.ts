@@ -1,12 +1,14 @@
-import { eq, inArray } from "drizzle-orm";
+import { and, desc, eq, inArray, isNull, sql } from "drizzle-orm";
 import webpush from "web-push";
 import { db, schema } from "@/db";
 import { sendEmail } from "@/lib/email";
 import { SITE_URL } from "@/lib/site";
 
-// Keeping people in the loop. Every notification lands in the in-app inbox (the Applications
-// tab), and is also pushed to each browser the person enabled notifications on and emailed when
-// we have their address. Push and email are best effort: a failure never loses the inbox row.
+// Keeping people in the loop. Every notification lands in the in-app inbox (the header's bell),
+// and is also pushed to each browser the person enabled notifications on and emailed when we have
+// their address. Push and email are best effort: a failure never loses the inbox row.
+// Call it once per real event; repeated updates about the same thing share a `tag`, so a phone
+// shows only the newest one.
 
 const { notifications, pushSubscriptions, users } = schema;
 
@@ -16,7 +18,17 @@ export type Notice = {
   /** Path to open, e.g. `/applications/<id>`. */
   url?: string;
   applicationId?: string;
+  /**
+   * Groups pushes about the same thing (`application:<id>`, `publication:<id>`): a newer one
+   * replaces the older on the device. Defaults to the application, else the url.
+   */
+  tag?: string;
+  /** Also email it (default true). The test notification skips email. */
+  email?: boolean;
 };
+
+/** Where a notification without its own url opens. */
+const INBOX = "/me/notifications";
 
 let vapidReady = false;
 function vapid() {
@@ -47,14 +59,16 @@ export async function notify(userId: string, notice: Notice) {
     .returning({ id: notifications.id });
 
   const [pushed, emailed] = await Promise.all([
-    push(userId, notice).catch((err) => {
+    push(userId, row.id, notice).catch((err) => {
       console.error("push failed", err);
       return false;
     }),
-    email(userId, notice).catch((err) => {
-      console.error("email failed", err);
-      return false;
-    }),
+    notice.email === false
+      ? false
+      : email(userId, notice).catch((err) => {
+          console.error("email failed", err);
+          return false;
+        }),
   ]);
 
   if (pushed || emailed) {
@@ -67,12 +81,15 @@ export async function notify(userId: string, notice: Notice) {
   return row.id;
 }
 
-async function push(userId: string, notice: Notice) {
+async function push(userId: string, id: string, notice: Notice) {
   if (!vapid()) return false;
   const subs = await db.select().from(pushSubscriptions).where(eq(pushSubscriptions.userId, userId));
   if (!subs.length) return false;
 
-  const payload = JSON.stringify({ title: notice.title, body: notice.body, url: notice.url ?? "/applications" });
+  const url = notice.url ?? INBOX;
+  const tag = notice.tag ?? (notice.applicationId ? `application:${notice.applicationId}` : url);
+  // public/sw.js reads this: it shows the notification, and marks `id` read when it's clicked.
+  const payload = JSON.stringify({ id, title: notice.title, body: notice.body, url, tag });
   const gone: string[] = [];
   const results = await Promise.all(
     subs.map((s) =>
@@ -94,7 +111,7 @@ async function push(userId: string, notice: Notice) {
 async function email(userId: string, notice: Notice) {
   const [user] = await db.select({ email: users.email, name: users.name }).from(users).where(eq(users.id, userId));
   if (!user?.email) return false;
-  const link = appUrl(notice.url ?? "/applications");
+  const link = appUrl(notice.url ?? INBOX);
   return sendEmail({
     to: user.email,
     subject: notice.title,
@@ -115,4 +132,80 @@ function emailHtml(notice: Notice, link: string) {
 ${body}
 <a href="${escape(link)}" style="display:inline-block;background:#ff385c;color:#fff;text-decoration:none;font-weight:500;padding:12px 20px;border-radius:8px">Open in AgentBnB</a>
 </div>`;
+}
+
+// ---------------------------------------------------------------------------
+// The inbox behind the header's bell
+// ---------------------------------------------------------------------------
+
+export type InboxItem = {
+  id: string;
+  title: string;
+  body: string | null;
+  url: string | null;
+  read: boolean;
+  /** ISO time. */
+  at: string;
+};
+
+/** The person's newest notifications and how many are unread. */
+export async function inbox(userId: string, limit = 20) {
+  const [rows, unread] = await Promise.all([
+    db
+      .select({
+        id: notifications.id,
+        title: notifications.title,
+        body: notifications.body,
+        url: notifications.url,
+        readAt: notifications.readAt,
+        createdAt: notifications.createdAt,
+      })
+      .from(notifications)
+      .where(eq(notifications.userId, userId))
+      .orderBy(desc(notifications.createdAt))
+      .limit(limit),
+    countUnread(userId),
+  ]);
+  const items: InboxItem[] = rows.map((r) => ({
+    id: r.id,
+    title: r.title,
+    body: r.body,
+    url: r.url,
+    read: r.readAt != null,
+    at: r.createdAt.toISOString(),
+  }));
+  return { items, unread };
+}
+
+export async function countUnread(userId: string) {
+  const [row] = await db
+    .select({ n: sql<number>`count(*)::int` })
+    .from(notifications)
+    .where(and(eq(notifications.userId, userId), isNull(notifications.readAt)));
+  return row?.n ?? 0;
+}
+
+/** Mark these notifications (all of the person's when `ids` is omitted) as read. */
+export async function markNotificationsRead(userId: string, ids?: string[]) {
+  if (ids && !ids.length) return;
+  await db
+    .update(notifications)
+    .set({ readAt: new Date() })
+    .where(
+      and(eq(notifications.userId, userId), isNull(notifications.readAt), ids ? inArray(notifications.id, ids) : undefined),
+    );
+}
+
+/**
+ * Whether the person has something going on that a push would be about: an application out, a
+ * place they host, or a stay request. The home only suggests turning notifications on then.
+ */
+export async function hasSomethingToHear(userId: string) {
+  const { rows } = await db.execute<{ yes: boolean }>(sql`select (
+    exists (select 1 from applications where user_id = ${userId} and status <> 'draft')
+    or exists (select 1 from listings where host_user_id = ${userId} and status = 'active')
+    or exists (select 1 from incoming_requests where host_user_id = ${userId})
+    or exists (select 1 from notifications where user_id = ${userId})
+  ) as yes`);
+  return !!rows[0]?.yes;
 }

@@ -9,6 +9,7 @@ import { PlusIcon } from "@/components/ui/icons";
 import { listHostListings } from "@/lib/hosting/listings";
 import { networksForListing } from "@/lib/hosting/networks";
 import { currentUser } from "@/lib/session";
+import { PushSetup } from "../notifications";
 import { HostListings } from "./listings";
 
 export const metadata: Metadata = {
@@ -46,13 +47,22 @@ async function Listings() {
   const user = await currentUser();
   const listings = user ? await listHostListings(user.id) : [];
   if (!listings.length) return <Empty />;
-  return <HostListings listings={listings.map((l) => ({ ...l, networks: networksForListing(l) }))} />;
+  return (
+    <div className="flex flex-col gap-6">
+      <PushSetup
+        hideWhenOn
+        title="Know when a guest asks"
+        lead="I'll tell you the moment someone wants to stay, or a site needs you to finish publishing."
+      />
+      <HostListings listings={listings.map((l) => ({ ...l, networks: networksForListing(l) }))} />
+    </div>
+  );
 }
 
 function Empty() {
   return (
     <div className="flex flex-col items-center rounded-[14px] border border-dashed border-hairline px-6 py-14 text-center">
-      <Couchbot size={72} mood="sleepy" className="mb-3" />
+      <Couchbot size={72} mood="sleepy" animated className="mb-3" />
       <p className="text-[20px] font-semibold">No listings yet</p>
       <p className="mx-auto mt-2 max-w-md text-[15px] text-muted">
         Tell me about your couch or spare room in the chat, in a sentence or two. I write the listing, put it on

@@ -10,6 +10,35 @@ const FIT_ICON = { work: BriefcaseIcon, sport: MountainIcon, dates: CalendarIcon
  * One listing in full, sized to fill a side panel: photos, host, why it fits, dates and rules,
  * with `footer` pinned at the bottom for the price and the call to action.
  */
+/** The panel while a clicked stay loads, or when it's gone: same frame, shimmer instead of content. */
+export function StayPanelPlaceholder({ missing = false, onClose }: { missing?: boolean; onClose: () => void }) {
+  return (
+    <div className="flex h-full flex-col bg-canvas" aria-busy={!missing}>
+      <header className="flex h-16 shrink-0 items-center justify-between gap-3 pl-6 pr-3">
+        <span className={`h-4 w-40 rounded-full bg-surface-strong ${missing ? "invisible" : "motion-safe:animate-shimmer"}`} />
+        <button
+          type="button"
+          onClick={onClose}
+          aria-label="Close panel"
+          className="flex size-10 shrink-0 items-center justify-center rounded-full transition-colors hover:bg-surface-strong"
+        >
+          <CloseIcon size={18} strokeWidth={2.2} />
+        </button>
+      </header>
+      {missing ? (
+        <p className="px-6 text-[15px] text-muted">This place isn&apos;t listed anymore.</p>
+      ) : (
+        <div className="flex flex-col gap-4 px-6 motion-safe:animate-shimmer">
+          <div className="aspect-[2/1] w-full rounded-[20px] bg-surface-strong" />
+          <div className="h-7 w-3/4 rounded-lg bg-surface-strong" />
+          <div className="h-4 w-1/2 rounded-full bg-surface-strong" />
+          <div className="mt-2 h-14 w-full rounded-2xl bg-surface-soft" />
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function StayPanel({
   stay,
   label,

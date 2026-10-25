@@ -21,6 +21,9 @@ const NETWORKS: [id: string, name: string][] = [
 ];
 const NAMES = Object.fromEntries(NETWORKS);
 
+/** Fired when a live search lands with results; the chat shows Couchbot happy for a moment. */
+export const COUCHBOT_FOUND = "agentbnb:couchbot-found";
+
 /** How long each network takes to "check" while the search runs, and once results are in. */
 const STEP_MS = 420;
 const FINISH_STEP_MS = 55;
@@ -35,18 +38,24 @@ const SETTLE_MS = 320;
  */
 export function LiveSearch({
   done,
+  found = false,
   location,
   sources,
   children,
 }: {
   done: boolean;
+  /** Results came back: Couchbot cheers when they appear (see COUCHBOT_FOUND). */
+  found?: boolean;
   location?: string;
   sources?: (string | undefined)[];
   children: ReactNode;
 }) {
   const [holding, setHolding] = useState(!done);
   // stable, so the chat re-rendering on every streamed word doesn't restart the settle timer
-  const release = useCallback(() => setHolding(false), []);
+  const release = useCallback(() => {
+    setHolding(false);
+    if (found) window.dispatchEvent(new Event(COUCHBOT_FOUND));
+  }, [found]);
   if (done && !holding) return children;
   return <SearchProgress location={location} sources={sources} finishing={done} onFinished={release} />;
 }

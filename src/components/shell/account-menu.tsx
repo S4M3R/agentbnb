@@ -11,7 +11,16 @@ import type { Me } from "./nav";
  * the agent API docs. Escape, a click outside or picking an item closes it. Shows the member's photo
  * (or initial) once `me` is known, and Airbnb's default silhouette before that.
  */
-export function AccountMenu({ onNewChat, me }: { onNewChat: () => void; me?: Me | null }) {
+export function AccountMenu({
+  onNewChat,
+  me,
+  notifications,
+}: {
+  onNewChat: () => void;
+  me?: Me | null;
+  /** The "Notifications" row (push on this device); given a callback that closes the menu. */
+  notifications?: (onNavigate: () => void) => ReactNode;
+}) {
   const [open, setOpen] = useState(false);
   const root = useRef<HTMLDivElement>(null);
   const button = useRef<HTMLButtonElement>(null);
@@ -41,8 +50,9 @@ export function AccountMenu({ onNewChat, me }: { onNewChat: () => void; me?: Me 
     <div
       ref={root}
       className="relative"
-      // Tabbing out of the menu closes it, like a click outside.
-      onBlur={(e) => !root.current?.contains(e.relatedTarget as Node | null) && setOpen(false)}
+      // Tabbing out of the menu closes it, like a click outside. The window losing focus (the
+      // browser's notification prompt) doesn't.
+      onBlur={(e) => document.hasFocus() && !root.current?.contains(e.relatedTarget as Node | null) && setOpen(false)}
     >
       <button
         ref={button}
@@ -100,6 +110,12 @@ export function AccountMenu({ onNewChat, me }: { onNewChat: () => void; me?: Me 
             <MenuLink href="/me/keychain" onNavigate={close}>
               Keychain
             </MenuLink>
+            {notifications && (
+              <>
+                <hr className="my-2 border-hairline-soft" />
+                {notifications(close)}
+              </>
+            )}
             <hr className="my-2 border-hairline-soft" />
             <MenuLink href="/docs.md" onNavigate={close} quiet>
               API for your agent

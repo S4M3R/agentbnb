@@ -283,7 +283,7 @@ function EmptyState({ filtered, onReset }: { filtered: boolean; onReset: () => v
   return (
     <div className="flex flex-col items-start gap-4 rounded-card border border-hairline-soft p-6">
       <div className="flex items-center gap-3.5">
-        <Couchbot size={52} mood="sleepy" className="shrink-0" />
+        <Couchbot size={52} mood="sleepy" animated className="shrink-0" />
         <div>
           <p className="text-base font-semibold">Nothing here yet</p>
           <p className="mt-1 text-sm text-muted">

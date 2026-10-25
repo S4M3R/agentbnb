@@ -5,6 +5,7 @@ import { z } from "zod";
 import { db, schema } from "@/db";
 import type { CheckProfile, GuestSnapshot } from "@/db/schema";
 import { agentModel } from "@/lib/agent/model";
+import { notify } from "@/lib/notify";
 import { readPage } from "./read-page";
 
 // The background-check agent. It looks the guest up on the open web, writes what it finds into
@@ -316,4 +317,25 @@ export async function runCheck(checkId: string) {
     const aborted = err instanceof Error && (err.name === "TimeoutError" || err.name === "AbortError");
     await fail(aborted ? "The check ran out of time. Run it again." : "Something went wrong while checking. Run it again.");
   }
+  await notifyHost(checkId, r.id, r.guest.name).catch((err) => console.error("check notify failed", checkId, err));
+}
+
+const VERDICT = { consistent: "Looks consistent", some_gaps: "Some gaps", red_flags: "Red flags" } as const;
+
+/** The host asked for the check and may have left the page: tell them it's done (or failed). */
+async function notifyHost(checkId: string, requestId: string, guestName: string) {
+  const [c] = await db
+    .select({ hostUserId: checks.requestedBy, status: checks.status, verdict: checks.verdict, summary: checks.summary, error: checks.error })
+    .from(checks)
+    .where(eq(checks.id, checkId));
+  if (!c || c.status === "running") return;
+  const done = c.status === "done";
+  await notify(c.hostUserId, {
+    title: done
+      ? `Check on ${guestName} is ready${c.verdict ? `: ${VERDICT[c.verdict]}` : ""}`
+      : `Check on ${guestName} didn't finish`,
+    body: (done ? c.summary : c.error) ?? undefined,
+    url: `/requests/${requestId}`,
+    tag: `check:${checkId}`,
+  });
 }

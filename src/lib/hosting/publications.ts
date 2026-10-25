@@ -1,5 +1,6 @@
 import { and, eq, inArray, isNotNull, isNull, or, sql } from "drizzle-orm";
 import { db, schema } from "@/db";
+import { notify } from "@/lib/notify";
 import { getHostListing, HostingError } from "./listings";
 import { getNetwork, MAX_PARALLEL_RUNS } from "./networks";
 
@@ -41,6 +42,32 @@ async function owned(userId: string, publicationId: string) {
 export async function updatePublication(id: string, set: Partial<typeof pubs.$inferInsert>) {
   const [row] = await db.update(pubs).set(set).where(eq(pubs.id, id)).returning();
   return row;
+}
+
+/**
+ * Tell the host how a browser run on a network went: it needs them, it's live, or it failed.
+ * Only for what the agent did; the host's own Stop or "I finished it" stay quiet. Pushes about the
+ * same publication share a tag, so the phone keeps just the latest.
+ */
+export async function notifyPublication(id: string, event: "needs_user" | "live" | "failed", message?: string | null) {
+  const [row] = await db
+    .select({ hostUserId: listings.hostUserId, title: listings.title, sourceId: pubs.sourceId })
+    .from(pubs)
+    .innerJoin(listings, eq(listings.id, pubs.listingId))
+    .where(eq(pubs.id, id));
+  if (!row?.hostUserId) return;
+  const network = getNetwork(row.sourceId)?.name ?? row.sourceId;
+  const title = {
+    needs_user: `${network} needs you for a moment`,
+    live: `You're live on ${network}`,
+    failed: `Couldn't publish on ${network}`,
+  }[event];
+  await notify(row.hostUserId, {
+    title,
+    body: message || `${row.title}. Open Hosting to see where it stands.`,
+    url: "/hosting",
+    tag: `publication:${id}`,
+  }).catch((err) => console.error("publication notify failed", id, err));
 }
 
 /**

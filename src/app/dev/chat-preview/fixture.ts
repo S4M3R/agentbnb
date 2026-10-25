@@ -157,3 +157,64 @@ export const previewMessages: AgentUIMessage[] = [
     ],
   },
 ];
+
+/** `?login=1`: the agent asking for a Workaway login with the inline askForLogin card. */
+export const loginAskMessages: AgentUIMessage[] = [
+  { id: "u-login", role: "user", parts: [{ type: "text", text: "Apply to the garden collective on Workaway for me" }] },
+  {
+    id: "a-login",
+    role: "assistant",
+    parts: [
+      { type: "text", text: "Workaway wants you logged in to apply. Save your login here and I'll sign in for you." },
+      {
+        type: "tool-askForLogin",
+        toolCallId: "call-login",
+        state: "input-available",
+        input: {
+          site: "workaway",
+          siteName: "Workaway",
+          reason: "Workaway needs you logged in to send your application.",
+        },
+      },
+    ],
+  },
+];
+
+/**
+ * `?app=<uuid>`: a sent application's card, for one of your own applications (e.g. a test one
+ * waiting for your login). Its live status and form come from /api/applications.
+ */
+export function applicationMessages(id: string): AgentUIMessage[] {
+  return [
+    { id: "u-app", role: "user", parts: [{ type: "text", text: "Send it" }] },
+    {
+      id: "a-app",
+      role: "assistant",
+      parts: [
+        {
+          type: "tool-sendApplications",
+          toolCallId: "call-app",
+          state: "output-available",
+          input: { applicationIds: [id] },
+          output: {
+            applications: [
+              {
+                id,
+                status: "sending",
+                statusMessage: null,
+                title: "Your application",
+                source: "Workaway",
+                sourceId: "workaway",
+                photo: null,
+                startDate: null,
+                endDate: null,
+                intro: null,
+                url: `/applications/${id}`,
+              },
+            ],
+          },
+        },
+      ],
+    },
+  ];
+}

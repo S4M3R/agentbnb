@@ -3,6 +3,7 @@ import { z } from "zod";
 import { db, schema } from "@/db";
 import { ApiError, authenticate } from "@/lib/api-auth";
 import { setStatus } from "@/lib/applications";
+import { notify } from "@/lib/notify";
 import { currentUser } from "@/lib/session";
 
 // Stay requests a host receives, from AgentBnB and from the external networks their place is on.
@@ -189,12 +190,14 @@ export const ImportedRequest = z.object({
   receivedAt: z.iso.datetime({ offset: true }).optional(),
 });
 
+const shortDate = new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", timeZone: "UTC" });
+
 /** Add or update a request the host received on an external platform. */
 export async function importRequest(hostUserId: string, input: z.infer<typeof ImportedRequest>) {
   if (input.source === "internal") {
     throw new ApiError(400, "INVALID_SOURCE", "Internal requests come from applications; import external ones only.");
   }
-  const [source] = await db.select({ id: sources.id }).from(sources).where(eq(sources.id, input.source));
+  const [source] = await db.select({ id: sources.id, name: sources.name }).from(sources).where(eq(sources.id, input.source));
   if (!source) throw new ApiError(400, "UNKNOWN_SOURCE", `No source "${input.source}". Source ids are listed in /docs.md.`);
   if (input.listingId) {
     const [own] = await db
@@ -224,8 +227,28 @@ export async function importRequest(hostUserId: string, input: z.infer<typeof Im
       target: [requests.hostUserId, requests.sourceId, requests.externalRef],
       set: { ...values, updatedAt: new Date() },
     })
-    .returning({ id: requests.id, status: requests.status });
-  return row;
+    .returning({
+      id: requests.id,
+      status: requests.status,
+      // Postgres sets xmax only on rows the upsert updated, so 0 means this request is new.
+      created: sql<boolean>`(xmax = 0)`,
+    });
+
+  // Tell the host about a new request, once: re-importing it (the agent syncs their inbox) is quiet.
+  if (row.created && row.status === "new") {
+    const day = (d: string) => shortDate.format(new Date(`${d}T00:00:00Z`));
+    const { startDate: start, endDate: end } = input;
+    // "Oct 24 – 25", "Oct 30 – Nov 1", or just "Oct 24".
+    const until = end && end !== start ? (end.slice(0, 7) === start?.slice(0, 7) ? String(Number(end.slice(8))) : day(end)) : null;
+    const when = start ? ` ${day(start)}${until ? ` – ${until}` : ""}` : "";
+    await notify(hostUserId, {
+      title: `${input.guest.name} wants to stay${when}`,
+      body: input.message?.trim().slice(0, 200) || `A new request on ${source.name}.`,
+      url: `/requests/${row.id}`,
+      tag: `request:${row.id}`,
+    });
+  }
+  return { id: row.id, status: row.status };
 }
 
 /** The person behind a request: a bearer API key (their agents) or the web session cookie (the site). */

@@ -13,7 +13,8 @@ export async function PATCH(req: Request) {
   const principal = await authenticate(req);
   if (!principal) return unauthenticated();
   try {
-    const input = await parseBody(req, ProfileInput.strict());
+    // Email is the API registration identity: unknown here, so `email` is rejected like any other.
+    const input = await parseBody(req, ProfileInput.omit({ email: true }).strict());
     const profile = await updateProfile(principal.user.id, input);
     const url = new URL(profilePath(profile.id), req.url).href;
     return Response.json({ profile: { ...profile, url } });

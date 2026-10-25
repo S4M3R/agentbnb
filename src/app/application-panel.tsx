@@ -10,7 +10,7 @@ import type { ApplicationDetail } from "./api/applications/[id]/route";
 import { APPLICATIONS_CHANGED } from "./application-cards";
 import { sendApplications } from "./applications/actions";
 import { STATUS, TRANSIENT, TYPE_LABEL, formatRange, statusClass, timeAgo } from "./applications/status";
-import { MarkRead, ReplyBox, kickRuns } from "./applications/ui";
+import { kickRuns, MarkRead, ReplyBox, WatchBrowser } from "./applications/ui";
 import { NeedsUserBlock } from "./me/keychain/forms";
 
 // One of the guest's applications in the chat's side panel, like a listing: the place, what the
@@ -102,6 +102,12 @@ export function ApplicationPanel({ id, onClose }: { id: string; onClose: () => v
                 <NeedsUserBlock app={app} ask={app.ask} />
               </div>
             )}
+            {/* While the agent works on its own, watch its browser here (or see it getting ready). */}
+            {app.status !== "needs_user" && (app.liveViewUrl || app.status === "queued" || app.status === "sending") && (
+              <div className="mb-6">
+                <WatchBrowser url={app.liveViewUrl} site={app.source.name} message={app.statusMessage} />
+              </div>
+            )}
             <PhotoMosaic photos={app.photos} title={app.listing.title} />
 
             <span
@@ -122,7 +128,7 @@ export function ApplicationPanel({ id, onClose }: { id: string; onClose: () => v
               ]}
             />
 
-            {app.statusMessage && app.status !== "draft" && app.status !== "needs_user" && (
+            {app.statusMessage && app.status !== "draft" && app.status !== "needs_user" && !(app.liveViewUrl || app.status === "queued" || app.status === "sending") && (
               <p className="mt-5 rounded-[14px] bg-surface-soft px-4 py-3 text-sm leading-relaxed text-body">
                 {app.statusMessage}
               </p>

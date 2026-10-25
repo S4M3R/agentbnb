@@ -30,7 +30,8 @@ export function StayResults({
   onApply?: (stay: StayCardData) => void;
   /** Ids on the guest's apply list; their cards say "Added". */
   inList?: Set<string>;
-  onAddToList?: (stay: StayCardData) => void;
+  /** `from` is the clicked button, for the fly-to-list animation. */
+  onAddToList?: (stay: StayCardData, from: HTMLElement) => void;
 }) {
   const rail = useRef<HTMLUListElement>(null);
   const scroll = (dir: 1 | -1) =>
@@ -39,7 +40,7 @@ export function StayResults({
   if (stays.length === 0) {
     return (
       <p className="flex items-center gap-3 rounded-card bg-surface-soft px-4 py-3 text-sm text-muted">
-        <Couchbot size={32} mood="sleepy" className="shrink-0" />
+        <Couchbot size={40} mood="sleepy" animated className="shrink-0" />
         No stays matched that search.
       </p>
     );
@@ -86,7 +87,7 @@ export function StayResults({
               saved={saved?.has(s.id)}
               onToggleSave={onToggleSave && (() => onToggleSave(s))}
               onApply={onApply && (() => onApply(s))}
-              onAddToList={onAddToList && (() => onAddToList(s))}
+              onAddToList={onAddToList && ((from) => onAddToList(s, from))}
               inList={inList?.has(s.id)}
             />
           </li>

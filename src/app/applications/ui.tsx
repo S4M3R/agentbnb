@@ -2,14 +2,8 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect, useState, useTransition, type ReactNode } from "react";
-import {
-  continueInBrowser,
-  deletePushSubscription,
-  markNotificationsRead,
-  postMessage,
-  saveEmail,
-  savePushSubscription,
-} from "./actions";
+import { PushSetup } from "../notifications";
+import { continueInBrowser, markNotificationsRead, postMessage, saveEmail } from "./actions";
 
 type Result = { ok: true } | { ok: false; error: string };
 
@@ -213,6 +207,40 @@ export function ScheduleForm({ action }: { action: (arrival: string) => Promise<
   );
 }
 
+/**
+ * The agent's browser while it works on its own (applying, sending a reply, checking for news): the live
+ * Browserbase view to watch, or a placeholder of the same size while the session starts. The guest can
+ * click in to help; when the agent needs them, LiveBrowser / ResumeBrowser take over instead.
+ */
+export function WatchBrowser({ url, site, message }: { url: string | null; site: string; message: string | null }) {
+  return (
+    <div className="overflow-hidden rounded-[14px] border border-hairline shadow-float">
+      <div className="flex items-center gap-3 border-b border-hairline-soft px-4 py-3 text-sm">
+        <span className="relative flex size-2.5 shrink-0">
+          <span className="absolute inset-0 rounded-full bg-rausch motion-safe:animate-ping motion-safe:opacity-60" />
+          <span className="relative size-2.5 rounded-full bg-rausch" />
+        </span>
+        <div className="min-w-0 flex-1">
+          <div className="font-semibold text-ink">{url ? `Your agent is on ${site}` : `Opening ${site}…`}</div>
+          {message && <div className="truncate text-muted">{message}</div>}
+        </div>
+        {url && <span className="shrink-0 text-xs text-muted max-sm:hidden">Live · click in to help</span>}
+      </div>
+      {url ? (
+        <iframe
+          src={url}
+          title={`Live browser on ${site}`}
+          sandbox="allow-same-origin allow-scripts"
+          allow="clipboard-read; clipboard-write"
+          className="aspect-[4/3] w-full bg-surface-strong"
+        />
+      ) : (
+        <div className="aspect-[4/3] w-full bg-surface-soft motion-safe:animate-shimmer" aria-hidden="true" />
+      )}
+    </div>
+  );
+}
+
 /** The browser agent's live Browserbase session, which the guest can take over. */
 export function LiveBrowser({ applicationId, url, message }: { applicationId: string; url: string; message: string | null }) {
   return (
@@ -271,115 +299,44 @@ export function ResumeBrowser({ applicationId, message }: { applicationId: strin
   );
 }
 
-function urlBase64ToUint8Array(base64: string) {
-  const padded = (base64 + "=".repeat((4 - (base64.length % 4)) % 4)).replace(/-/g, "+").replace(/_/g, "/");
-  const raw = atob(padded);
-  return Uint8Array.from(raw, (c) => c.charCodeAt(0));
+/** "Get updates" panel: browser push on this device (the shared card), plus email. */
+export function NotifySetup({ email }: { email: string | null }) {
+  return (
+    <PushSetup title="Don't miss a reply" hideWhenOn>
+      {!email && <EmailOptIn />}
+    </PushSetup>
+  );
 }
 
-/** "Get updates" panel: browser push on this device, plus email. */
-export function NotifySetup({ email }: { email: string | null }) {
-  const [push, setPush] = useState<"unsupported" | "off" | "on" | "denied" | null>(null);
+/** "Email me updates too": saves the person's email, which every notification is also sent to. */
+export function EmailOptIn() {
   const [pending, start] = useTransition();
   const [emailInput, setEmailInput] = useState("");
   const [emailError, setEmailError] = useState<string | null>(null);
-
-  useEffect(() => {
-    const supported =
-      "serviceWorker" in navigator && "PushManager" in window && !!process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
-    (supported ? navigator.serviceWorker.register("/sw.js", { scope: "/", updateViaCache: "none" }) : Promise.reject())
-      .then((reg) => reg.pushManager.getSubscription())
-      .then((sub) => setPush(sub ? "on" : Notification.permission === "denied" ? "denied" : "off"))
-      .catch(() => setPush("unsupported"));
-  }, []);
-
-  function enablePush() {
-    start(async () => {
-      const permission = await Notification.requestPermission();
-      if (permission !== "granted") {
-        setPush("denied");
-        return;
-      }
-      const reg = await navigator.serviceWorker.ready;
-      const sub = await reg.pushManager.subscribe({
-        userVisibleOnly: true,
-        applicationServerKey: urlBase64ToUint8Array(process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY!),
-      });
-      await savePushSubscription(sub.toJSON(), navigator.userAgent);
-      setPush("on");
-    });
-  }
-
-  function disablePush() {
-    start(async () => {
-      const reg = await navigator.serviceWorker.ready;
-      const sub = await reg.pushManager.getSubscription();
-      if (sub) {
-        await deletePushSubscription(sub.endpoint);
-        await sub.unsubscribe();
-      }
-      setPush("off");
-    });
-  }
-
-  if (push === null) return null;
-  const pushOn = push === "on";
-  if (pushOn && email) return null;
-
   return (
-    <div className="flex flex-col gap-3 rounded-[14px] border border-hairline p-5 text-sm">
-      <div>
-        <div className="text-base font-semibold">Don&apos;t miss a reply</div>
-        <div className="mt-0.5 text-muted">
-          Hosts often answer within hours. I&apos;ll let you know the moment anything changes.
-        </div>
-      </div>
-      <div className="flex flex-wrap items-center gap-3">
-        {push === "off" && (
-          <button
-            type="button"
-            onClick={enablePush}
-            disabled={pending}
-            className={PRIMARY}
-          >
-            Turn on notifications
-          </button>
-        )}
-        {pushOn && (
-          <button type="button" onClick={disablePush} disabled={pending} className="font-medium text-muted underline-offset-2 hover:text-ink hover:underline">
-            Notifications on · turn off
-          </button>
-        )}
-        {push === "denied" && <span className="text-muted">Notifications are blocked in your browser settings.</span>}
-        {push === "unsupported" && (
-          <span className="text-muted">On iPhone, add AgentBnB to your Home Screen to get notifications.</span>
-        )}
-      </div>
-      {!email && (
-        <form
-          onSubmit={(e) => {
-            e.preventDefault();
-            setEmailError(null);
-            start(async () => {
-              const r = await saveEmail(emailInput);
-              if (!r.ok) setEmailError(r.error);
-            });
-          }}
-          className="flex flex-wrap items-center gap-2"
-        >
-          <input
-            type="email"
-            value={emailInput}
-            onChange={(e) => setEmailInput(e.currentTarget.value)}
-            placeholder="Email me updates too"
-            className={INPUT}
-          />
-          <button type="submit" disabled={!emailInput.trim() || pending} className={SECONDARY}>
-            Save
-          </button>
-          {emailError && <span className="w-full text-xs text-error">{emailError}</span>}
-        </form>
-      )}
-    </div>
+    <form
+      onSubmit={(e) => {
+        e.preventDefault();
+        setEmailError(null);
+        start(async () => {
+          const r = await saveEmail(emailInput);
+          if (!r.ok) setEmailError(r.error);
+        });
+      }}
+      className="flex flex-wrap items-center gap-2"
+    >
+      <input
+        type="email"
+        value={emailInput}
+        onChange={(e) => setEmailInput(e.currentTarget.value)}
+        placeholder="Email me updates too"
+        aria-label="Email"
+        className={INPUT}
+      />
+      <button type="submit" disabled={!emailInput.trim() || pending} className={SECONDARY}>
+        Save
+      </button>
+      {emailError && <span className="w-full text-xs text-error">{emailError}</span>}
+    </form>
   );
 }

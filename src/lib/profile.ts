@@ -1,9 +1,11 @@
-import { and, asc, eq, gte, inArray, sql } from "drizzle-orm";
+import { and, asc, eq, gte, inArray, ne, sql } from "drizzle-orm";
 import { z } from "zod";
 import { db, schema } from "@/db";
 
 // A member's profile: what hosts and guests see about them at /people/[id]. Members fill it in on
-// /me/profile, by telling the chat agent, or through PATCH /api/v1/me. Email stays private.
+// /me/profile, by telling the chat agent, or through PATCH /api/v1/me. Email stays private: only the
+// member sees it (/me/profile), the browser agent signs up and prefills logins with it, and we email
+// them updates. One email per member (users.email is unique); logins per site live in the Keychain.
 
 const { users, listings, listingPhotos, listingAvailability } = schema;
 
@@ -47,6 +49,17 @@ export const ProfileInput = z.object({
     .optional()
     .transform((l) => l && cleanLanguages(l))
     .describe('Languages they speak, e.g. ["Spanish", "English"]. Replaces the list.'),
+  /** Private. Not accepted by PATCH /api/v1/me, where it's the registration identity. */
+  email: z
+    .string()
+    .trim()
+    .toLowerCase()
+    .max(254, "That email is too long.")
+    .transform((v) => v || null)
+    .pipe(z.email("That doesn't look like an email address.").nullable())
+    .nullable()
+    .optional()
+    .describe("Private: the email they sign up on sites with and where we send updates. Never shown. null removes it."),
 });
 
 export type ProfileInput = z.input<typeof ProfileInput>;
@@ -74,10 +87,45 @@ export async function getMyProfile(userId: string) {
 
 export type MyProfile = NonNullable<Awaited<ReturnType<typeof getMyProfile>>>;
 
-/** Apply a validated update. Returns the profile as saved. */
-export async function updateProfile(userId: string, update: ProfileUpdate) {
+/** A profile change we can explain to the member, e.g. an email that's someone else's. */
+export class ProfileError extends Error {
+  constructor(
+    message: string,
+    readonly field?: keyof ProfileUpdate,
+  ) {
+    super(message);
+  }
+}
+
+const EMAIL_TAKEN = "That email belongs to another AgentBnB account.";
+
+/** Postgres unique_violation, from the driver or wrapped by Drizzle. */
+function isUniqueViolation(err: unknown) {
+  const e = err as { code?: string; cause?: { code?: string } } | null;
+  return e?.code === "23505" || e?.cause?.code === "23505";
+}
+
+/**
+ * Apply a validated update. Returns the profile as saved. An email another member has throws a
+ * ProfileError (we never merge accounts here; sign-in will handle that).
+ */
+export async function updateProfile(userId: string, update: Partial<ProfileUpdate>) {
   const fields = Object.fromEntries(Object.entries(update).filter(([, v]) => v !== undefined));
-  if (Object.keys(fields).length) await db.update(users).set(fields).where(eq(users.id, userId));
+  if (fields.email) {
+    const [taken] = await db
+      .select({ id: users.id })
+      .from(users)
+      .where(and(sql`lower(${users.email}) = ${fields.email}`, ne(users.id, userId)));
+    if (taken) throw new ProfileError(EMAIL_TAKEN, "email");
+  }
+  if (Object.keys(fields).length) {
+    try {
+      await db.update(users).set(fields).where(eq(users.id, userId));
+    } catch (err) {
+      if (isUniqueViolation(err)) throw new ProfileError(EMAIL_TAKEN, "email");
+      throw err;
+    }
+  }
   return (await getMyProfile(userId))!;
 }
 
